@@ -4,39 +4,66 @@ import {
   getLeadsAndConversions,
   getTopPages,
   getTrafficSources,
-  compareWeeklyMetrics,
+  compareWithLastYear,
+  getConversionsByChannel,
+  getLastCompleteWeek,
+  getSameWeekLastYear,
   type DateRange,
 } from "@/lib/ga-client";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  const startDate = searchParams.get("startDate") || "7daysAgo";
-  const endDate = searchParams.get("endDate") || "yesterday";
+  const periodType = searchParams.get("period") || "lastWeek";
 
-  const currentPeriod: DateRange = { startDate, endDate };
-  const previousPeriod: DateRange = { startDate: "14daysAgo", endDate: "8daysAgo" };
+  let currentPeriod: DateRange;
+
+  if (periodType === "lastWeek") {
+    currentPeriod = getLastCompleteWeek();
+  } else {
+    currentPeriod = {
+      startDate: searchParams.get("startDate") || "7daysAgo",
+      endDate: searchParams.get("endDate") || "yesterday",
+    };
+  }
+
+  const lastYearPeriod = getSameWeekLastYear(currentPeriod);
 
   try {
-    const [weeklyData, leads, topPages, trafficSources, comparison] = await Promise.all([
+    const [weeklyData, leads, topPages, trafficSources, comparison, conversionsByChannel] = await Promise.all([
       getWeeklyDashboardMetrics(currentPeriod),
       getLeadsAndConversions(currentPeriod),
       getTopPages(currentPeriod, 10),
       getTrafficSources(currentPeriod),
-      compareWeeklyMetrics(currentPeriod, previousPeriod),
+      compareWithLastYear(currentPeriod),
+      getConversionsByChannel(currentPeriod),
     ]);
+
+    // Calculate click to lead rate
+    const clickToLeadRate = weeklyData.totals.clicks > 0
+      ? (weeklyData.totals.conversions / weeklyData.totals.clicks) * 100
+      : 0;
 
     return NextResponse.json({
       success: true,
       data: {
-        period: { startDate, endDate },
-        totals: weeklyData.totals,
+        period: {
+          current: currentPeriod,
+          lastYear: lastYearPeriod,
+        },
+        totals: {
+          ...weeklyData.totals,
+          formSubmissions: conversionsByChannel.formSubmissions,
+          phoneCalls: conversionsByChannel.phoneCalls,
+          clickToLeadRate,
+        },
         daily: weeklyData.daily,
         leads,
         topPages,
         trafficSources,
+        conversionsByChannel: conversionsByChannel.byChannel,
         comparison: {
           current: comparison.current,
-          previous: comparison.previous,
+          lastYear: comparison.lastYear,
           changes: comparison.changes,
         },
       },

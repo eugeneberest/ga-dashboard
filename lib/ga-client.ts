@@ -46,6 +46,61 @@ export interface DateRange {
   endDate: string;
 }
 
+export interface ChannelMetrics {
+  channel: string;
+  users: number;
+  sessions: number;
+  clicks: number;
+  conversions: number;
+  formSubmissions: number;
+  phoneCalls: number;
+  clickToLeadRate: number;
+}
+
+export interface ConversionsByType {
+  formSubmissions: number;
+  phoneCalls: number;
+  totalConversions: number;
+  byChannel: ChannelMetrics[];
+}
+
+// Get the last complete week (Monday to Sunday)
+export function getLastCompleteWeek(): DateRange {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+
+  // Calculate last Sunday
+  const lastSunday = new Date(today);
+  lastSunday.setDate(today.getDate() - (dayOfWeek === 0 ? 7 : dayOfWeek));
+
+  // Calculate last Monday (6 days before last Sunday)
+  const lastMonday = new Date(lastSunday);
+  lastMonday.setDate(lastSunday.getDate() - 6);
+
+  return {
+    startDate: formatDateForGA(lastMonday),
+    endDate: formatDateForGA(lastSunday),
+  };
+}
+
+// Get the same week from last year
+export function getSameWeekLastYear(dateRange: DateRange): DateRange {
+  const start = new Date(dateRange.startDate);
+  const end = new Date(dateRange.endDate);
+
+  start.setFullYear(start.getFullYear() - 1);
+  end.setFullYear(end.getFullYear() - 1);
+
+  return {
+    startDate: formatDateForGA(start),
+    endDate: formatDateForGA(end),
+  };
+}
+
+function formatDateForGA(date: Date): string {
+  return date.toISOString().split('T')[0];
+}
+
 export async function getMetrics(
   dateRange: DateRange,
   metrics: string[] = ["activeUsers", "sessions", "bounceRate", "conversions", "screenPageViews"]
@@ -106,6 +161,115 @@ export async function getAggregatedMetrics(dateRange: DateRange): Promise<{
     bounceRate: parseFloat(metricValues[2]?.value || "0") * 100,
     conversions: parseInt(metricValues[3]?.value || "0"),
     pageviews: parseInt(metricValues[4]?.value || "0"),
+  };
+}
+
+export async function getConversionsByChannel(dateRange: DateRange): Promise<ConversionsByType> {
+  // Get conversions by default channel group
+  const [channelResponse] = await analyticsDataClient.runReport({
+    property: propertyId,
+    dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
+    dimensions: [{ name: "sessionDefaultChannelGroup" }],
+    metrics: [
+      { name: "activeUsers" },
+      { name: "sessions" },
+      { name: "conversions" },
+    ],
+    orderBys: [{ metric: { metricName: "conversions" }, desc: true }],
+  });
+
+  // Get form submissions and phone calls by event name and channel
+  const [eventsResponse] = await analyticsDataClient.runReport({
+    property: propertyId,
+    dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
+    dimensions: [{ name: "sessionDefaultChannelGroup" }, { name: "eventName" }],
+    metrics: [{ name: "eventCount" }],
+  });
+
+  // Get clicks data by channel (from Search Console if available)
+  let clicksByChannel: Map<string, number> = new Map();
+  try {
+    const [searchResponse] = await analyticsDataClient.runReport({
+      property: propertyId,
+      dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
+      dimensions: [{ name: "sessionDefaultChannelGroup" }],
+      metrics: [{ name: "organicGoogleSearchClicks" }],
+    });
+
+    if (searchResponse.rows) {
+      for (const row of searchResponse.rows) {
+        const channel = row.dimensionValues?.[0]?.value || "";
+        const clicks = parseInt(row.metricValues?.[0]?.value || "0");
+        clicksByChannel.set(channel, clicks);
+      }
+    }
+  } catch {
+    // Search Console data may not be available
+  }
+
+  // Process events to categorize form submissions and phone calls
+  const formEventNames = ['form_submit', 'generate_lead', 'contact_form', 'form_submission', 'submit_form', 'lead_form'];
+  const phoneEventNames = ['phone_click', 'click_to_call', 'tel_click', 'phone_call', 'call_click', 'phone'];
+
+  const channelData: Map<string, { forms: number; phones: number }> = new Map();
+  let totalForms = 0;
+  let totalPhones = 0;
+
+  if (eventsResponse.rows) {
+    for (const row of eventsResponse.rows) {
+      const channel = row.dimensionValues?.[0]?.value || "";
+      const eventName = (row.dimensionValues?.[1]?.value || "").toLowerCase();
+      const count = parseInt(row.metricValues?.[0]?.value || "0");
+
+      if (!channelData.has(channel)) {
+        channelData.set(channel, { forms: 0, phones: 0 });
+      }
+
+      const data = channelData.get(channel)!;
+
+      if (formEventNames.some(e => eventName.includes(e))) {
+        data.forms += count;
+        totalForms += count;
+      } else if (phoneEventNames.some(e => eventName.includes(e))) {
+        data.phones += count;
+        totalPhones += count;
+      }
+    }
+  }
+
+  // Build channel metrics
+  const byChannel: ChannelMetrics[] = [];
+  let totalConversions = 0;
+
+  if (channelResponse.rows) {
+    for (const row of channelResponse.rows) {
+      const channel = row.dimensionValues?.[0]?.value || "";
+      const users = parseInt(row.metricValues?.[0]?.value || "0");
+      const sessions = parseInt(row.metricValues?.[1]?.value || "0");
+      const conversions = parseInt(row.metricValues?.[2]?.value || "0");
+      const clicks = clicksByChannel.get(channel) || sessions; // Use sessions as proxy if no click data
+      const eventData = channelData.get(channel) || { forms: 0, phones: 0 };
+
+      totalConversions += conversions;
+
+      byChannel.push({
+        channel,
+        users,
+        sessions,
+        clicks,
+        conversions,
+        formSubmissions: eventData.forms,
+        phoneCalls: eventData.phones,
+        clickToLeadRate: clicks > 0 ? (conversions / clicks) * 100 : 0,
+      });
+    }
+  }
+
+  return {
+    formSubmissions: totalForms,
+    phoneCalls: totalPhones,
+    totalConversions,
+    byChannel,
   };
 }
 
@@ -370,17 +534,28 @@ export async function comparePeriods(
   };
 }
 
-export async function compareWeeklyMetrics(
-  period1: DateRange,
-  period2: DateRange
+export async function compareWithLastYear(
+  currentPeriod: DateRange
 ): Promise<{
-  current: Awaited<ReturnType<typeof getWeeklyDashboardMetrics>>["totals"];
-  previous: Awaited<ReturnType<typeof getWeeklyDashboardMetrics>>["totals"];
+  current: Awaited<ReturnType<typeof getWeeklyDashboardMetrics>>["totals"] & {
+    formSubmissions: number;
+    phoneCalls: number;
+    clickToLeadRate: number;
+  };
+  lastYear: Awaited<ReturnType<typeof getWeeklyDashboardMetrics>>["totals"] & {
+    formSubmissions: number;
+    phoneCalls: number;
+    clickToLeadRate: number;
+  };
   changes: Record<string, number>;
 }> {
-  const [current, previous] = await Promise.all([
-    getWeeklyDashboardMetrics(period1),
-    getWeeklyDashboardMetrics(period2),
+  const lastYearPeriod = getSameWeekLastYear(currentPeriod);
+
+  const [currentData, lastYearData, currentConversions, lastYearConversions] = await Promise.all([
+    getWeeklyDashboardMetrics(currentPeriod),
+    getWeeklyDashboardMetrics(lastYearPeriod),
+    getConversionsByChannel(currentPeriod),
+    getConversionsByChannel(lastYearPeriod),
   ]);
 
   const calculateChange = (curr: number, prev: number): number => {
@@ -388,18 +563,38 @@ export async function compareWeeklyMetrics(
     return ((curr - prev) / prev) * 100;
   };
 
+  const currentClickToLead = currentData.totals.clicks > 0
+    ? (currentConversions.totalConversions / currentData.totals.clicks) * 100
+    : 0;
+  const lastYearClickToLead = lastYearData.totals.clicks > 0
+    ? (lastYearConversions.totalConversions / lastYearData.totals.clicks) * 100
+    : 0;
+
   return {
-    current: current.totals,
-    previous: previous.totals,
+    current: {
+      ...currentData.totals,
+      formSubmissions: currentConversions.formSubmissions,
+      phoneCalls: currentConversions.phoneCalls,
+      clickToLeadRate: currentClickToLead,
+    },
+    lastYear: {
+      ...lastYearData.totals,
+      formSubmissions: lastYearConversions.formSubmissions,
+      phoneCalls: lastYearConversions.phoneCalls,
+      clickToLeadRate: lastYearClickToLead,
+    },
     changes: {
-      users: calculateChange(current.totals.users, previous.totals.users),
-      newUsers: calculateChange(current.totals.newUsers, previous.totals.newUsers),
-      sessions: calculateChange(current.totals.sessions, previous.totals.sessions),
-      pageviews: calculateChange(current.totals.pageviews, previous.totals.pageviews),
-      conversions: calculateChange(current.totals.conversions, previous.totals.conversions),
-      impressions: calculateChange(current.totals.impressions, previous.totals.impressions),
-      clicks: calculateChange(current.totals.clicks, previous.totals.clicks),
-      ctr: calculateChange(current.totals.ctr, previous.totals.ctr),
+      users: calculateChange(currentData.totals.users, lastYearData.totals.users),
+      newUsers: calculateChange(currentData.totals.newUsers, lastYearData.totals.newUsers),
+      sessions: calculateChange(currentData.totals.sessions, lastYearData.totals.sessions),
+      pageviews: calculateChange(currentData.totals.pageviews, lastYearData.totals.pageviews),
+      conversions: calculateChange(currentData.totals.conversions, lastYearData.totals.conversions),
+      impressions: calculateChange(currentData.totals.impressions, lastYearData.totals.impressions),
+      clicks: calculateChange(currentData.totals.clicks, lastYearData.totals.clicks),
+      ctr: calculateChange(currentData.totals.ctr, lastYearData.totals.ctr),
+      formSubmissions: calculateChange(currentConversions.formSubmissions, lastYearConversions.formSubmissions),
+      phoneCalls: calculateChange(currentConversions.phoneCalls, lastYearConversions.phoneCalls),
+      clickToLeadRate: calculateChange(currentClickToLead, lastYearClickToLead),
     },
   };
 }
