@@ -1,6 +1,17 @@
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
 
-const analyticsDataClient = new BetaAnalyticsDataClient();
+// Support both file-based credentials (local) and JSON string (Vercel)
+const getCredentials = () => {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+    return JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+  }
+  return undefined; // Falls back to GOOGLE_APPLICATION_CREDENTIALS file
+};
+
+const credentials = getCredentials();
+const analyticsDataClient = credentials
+  ? new BetaAnalyticsDataClient({ credentials })
+  : new BetaAnalyticsDataClient();
 
 const propertyId = process.env.GA_PROPERTY_ID || "";
 
