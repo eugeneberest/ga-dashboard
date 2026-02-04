@@ -296,23 +296,39 @@ function categorizeSource(source: string, medium: string): string {
     return 'llmAI';
   }
 
-  // Check for listing/directory sources
+  // Check for listing/directory sources (including _organic suffix variations)
   const listingMatches = ['yelp', 'clutch', 'expertise', 'thumbtack', 'homeadvisor', 'angi', 'bbb.org', 'yellowpages', 'manta', 'nextdoor', 'avvo', 'justia', 'healthgrades', 'zocdoc', 'houzz', 'cpafee', 'designrush', 'upcity', 'trustpilot', 'themanifest', 'bark.com', 'g2.com', 'capterra'];
   if (listingMatches.some(listing => sourceLower.includes(listing))) {
     return 'listings';
   }
 
-  // Check medium for paid advertising
-  if (mediumLower === 'cpc' || mediumLower === 'ppc' || mediumLower === 'paid' || mediumLower.includes('paid') || mediumLower === 'display') {
+  // Check for _paid suffix in source name (e.g., duckduckgo_paid)
+  if (sourceLower.endsWith('_paid') || mediumLower === 'cpc' || mediumLower === 'ppc' || mediumLower === 'paid' || mediumLower.includes('paid') || mediumLower === 'display') {
     return 'paidSearch';
   }
 
-  // Check for organic search engines (including AOL)
-  const organicEngines = [...ORGANIC_SEARCH_ENGINES, 'aol'];
+  // Check for organic search engines
+  const organicEngines = [...ORGANIC_SEARCH_ENGINES, 'aol', 'search'];
+
+  // Check for _organic suffix in source name (e.g., duckduckgo_organic, bing_organic)
+  if (sourceLower.endsWith('_organic')) {
+    const baseSource = sourceLower.replace('_organic', '');
+    if (organicEngines.some(engine => baseSource.includes(engine))) {
+      return 'organicSearch';
+    }
+  }
+
+  // Check for organic medium
   if (mediumLower === 'organic') {
     if (organicEngines.some(engine => sourceLower.includes(engine))) {
       return 'organicSearch';
     }
+  }
+
+  // Check for common search engines without explicit medium (google, bing, yahoo as source only)
+  const mainSearchEngines = ['google', 'bing', 'yahoo', 'duckduckgo', 'baidu', 'yandex'];
+  if (mainSearchEngines.some(engine => sourceLower === engine) && (mediumLower === '(none)' || mediumLower === '' || mediumLower === '(not set)')) {
+    return 'organicSearch';
   }
 
   // Check for social media (including t.co for Twitter)
@@ -322,12 +338,17 @@ function categorizeSource(source: string, medium: string): string {
   }
 
   // Check for direct
-  if (sourceLower === '(direct)' || sourceLower === 'website' || mediumLower === 'direct') {
+  if (sourceLower === '(direct)' || sourceLower === 'website' || sourceLower === 'offline' || mediumLower === 'direct' || mediumLower === '(none)' && sourceLower === '(direct)') {
     return 'direct';
   }
 
   // Check for referral
   if (mediumLower === 'referral') {
+    return 'referral';
+  }
+
+  // Check if source looks like a website domain (contains . and ends with common TLD) - treat as referral
+  if (sourceLower.includes('.') && (sourceLower.endsWith('.com') || sourceLower.endsWith('.org') || sourceLower.endsWith('.net') || sourceLower.endsWith('.co') || sourceLower.endsWith('.io'))) {
     return 'referral';
   }
 
@@ -435,7 +456,7 @@ export async function getAggregatedMetrics(dateRange: DateRange): Promise<{
 }
 
 export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise<DetailedChannelBreakdown> {
-  // Get data by source/medium
+  // Get data by source/medium - increased limit to capture more sources
   const [sourceResponse] = await analyticsDataClient.runReport({
     property: propertyId,
     dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
@@ -446,23 +467,23 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
       { name: "conversions" },
     ],
     orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
-    limit: 100,
+    limit: 500,
   });
 
-  // Get form submissions and phone calls by source/medium
+  // Get form submissions and phone calls by source/medium - increased limit
   const [eventsResponse] = await analyticsDataClient.runReport({
     property: propertyId,
     dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
     dimensions: [{ name: "sessionSource" }, { name: "sessionMedium" }, { name: "eventName" }],
     metrics: [{ name: "eventCount" }],
-    limit: 500,
+    limit: 1000,
   });
 
   const formEventNames = ['form_submit', 'generate_lead', 'contact_form', 'form_submission', 'submit_form', 'lead_form'];
   const phoneEventNames = ['phone_click', 'click_to_call', 'tel_click', 'phone_call', 'call_click', 'phone', 'phonecall'];
 
-  // Build event data map
-  const eventData: Map<string, { forms: number; phones: number }> = new Map();
+  // Build event data map and track all sources with events
+  const eventData: Map<string, { forms: number; phones: number; source: string; medium: string }> = new Map();
   if (eventsResponse.rows) {
     for (const row of eventsResponse.rows) {
       const source = row.dimensionValues?.[0]?.value || "";
@@ -472,7 +493,7 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
       const key = `${source}|${medium}`;
 
       if (!eventData.has(key)) {
-        eventData.set(key, { forms: 0, phones: 0 });
+        eventData.set(key, { forms: 0, phones: 0, source, medium });
       }
       const data = eventData.get(key)!;
 
@@ -483,6 +504,24 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
       }
     }
   }
+
+  // Build source data map from sessions query
+  const sourceData: Map<string, { users: number; sessions: number; conversions: number; source: string; medium: string }> = new Map();
+  if (sourceResponse.rows) {
+    for (const row of sourceResponse.rows) {
+      const source = row.dimensionValues?.[0]?.value || "";
+      const medium = row.dimensionValues?.[1]?.value || "";
+      const users = parseInt(row.metricValues?.[0]?.value || "0");
+      const sessions = parseInt(row.metricValues?.[1]?.value || "0");
+      const conversions = parseInt(row.metricValues?.[2]?.value || "0");
+      const key = `${source}|${medium}`;
+
+      sourceData.set(key, { users, sessions, conversions, source, medium });
+    }
+  }
+
+  // Merge all unique source/medium combinations from both queries
+  const allKeys = new Set([...sourceData.keys(), ...eventData.keys()]);
 
   // Initialize breakdown
   const breakdown: DetailedChannelBreakdown = {
@@ -496,38 +535,41 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
     other: [],
   };
 
-  if (sourceResponse.rows) {
-    for (const row of sourceResponse.rows) {
-      const source = row.dimensionValues?.[0]?.value || "";
-      const medium = row.dimensionValues?.[1]?.value || "";
-      const users = parseInt(row.metricValues?.[0]?.value || "0");
-      const sessions = parseInt(row.metricValues?.[1]?.value || "0");
-      const conversions = parseInt(row.metricValues?.[2]?.value || "0");
+  for (const key of allKeys) {
+    const sessions = sourceData.get(key) || { users: 0, sessions: 0, conversions: 0, source: '', medium: '' };
+    const events = eventData.get(key) || { forms: 0, phones: 0, source: '', medium: '' };
 
-      const key = `${source}|${medium}`;
-      const events = eventData.get(key) || { forms: 0, phones: 0 };
-      const category = categorizeSource(source, medium);
+    // Get source/medium from whichever has data
+    const source = sessions.source || events.source;
+    const medium = sessions.medium || events.medium;
 
-      const metrics: SourceMetrics = {
-        source,
-        medium,
-        category,
-        users,
-        sessions,
-        conversions,
-        formSubmissions: events.forms,
-        phoneCalls: events.phones,
-        clickToLeadRate: sessions > 0 ? (conversions / sessions) * 100 : 0,
-      };
+    // Skip if no source
+    if (!source) continue;
 
-      breakdown[category as keyof DetailedChannelBreakdown].push(metrics);
-    }
+    const category = categorizeSource(source, medium);
+
+    const metrics: SourceMetrics = {
+      source,
+      medium,
+      category,
+      users: sessions.users,
+      sessions: sessions.sessions,
+      conversions: sessions.conversions,
+      formSubmissions: events.forms,
+      phoneCalls: events.phones,
+      clickToLeadRate: sessions.sessions > 0 ? (sessions.conversions / sessions.sessions) * 100 : 0,
+    };
+
+    breakdown[category as keyof DetailedChannelBreakdown].push(metrics);
   }
 
-  // Aggregate and sort each category by sessions
+  // Aggregate and sort each category by sessions (then by conversions for ties)
   for (const key of Object.keys(breakdown) as Array<keyof DetailedChannelBreakdown>) {
     breakdown[key] = aggregateSources(breakdown[key], key);
-    breakdown[key].sort((a, b) => b.sessions - a.sessions);
+    breakdown[key].sort((a, b) => {
+      if (b.sessions !== a.sessions) return b.sessions - a.sessions;
+      return (b.formSubmissions + b.phoneCalls) - (a.formSubmissions + a.phoneCalls);
+    });
   }
 
   return breakdown;
