@@ -135,6 +135,113 @@ const PAID_SEARCH_SOURCES = [
   'linkedin', 'twitter', 'tiktok', 'pinterest'
 ];
 
+// Normalize source names to group similar sources together
+function normalizeSourceName(source: string): string {
+  const sourceLower = source.toLowerCase().trim();
+
+  // Remove www. prefix
+  let normalized = sourceLower.replace(/^www\./, '');
+
+  // Remove m. prefix (mobile versions)
+  normalized = normalized.replace(/^m\./, '');
+
+  // Remove l. prefix (link trackers like l.facebook.com)
+  normalized = normalized.replace(/^l\./, '');
+
+  // Remove lm. prefix
+  normalized = normalized.replace(/^lm\./, '');
+
+  // Normalize specific sources
+  const sourceMap: Record<string, string> = {
+    'chatgpt.com': 'ChatGPT',
+    'chat.openai.com': 'ChatGPT',
+    'openai.com': 'OpenAI',
+    'perplexity.ai': 'Perplexity',
+    'perplexity': 'Perplexity',
+    'claude.ai': 'Claude AI',
+    'anthropic.com': 'Anthropic',
+    'gemini.google.com': 'Google Gemini',
+    'bard.google.com': 'Google Gemini',
+    'copilot.com': 'Microsoft Copilot',
+    'copilot.microsoft.com': 'Microsoft Copilot',
+    'yelp.com': 'Yelp',
+    'yelp': 'Yelp',
+    'yelp_organic': 'Yelp',
+    'clutch.co': 'Clutch',
+    'expertise.com': 'Expertise',
+    'designrush.com': 'DesignRush',
+    'cpafee.com': 'CPA Fee',
+    'manta.com': 'Manta',
+    'trustpilot': 'Trustpilot',
+    'trustpilot.com': 'Trustpilot',
+    'themanifest.com': 'The Manifest',
+    'facebook.com': 'Facebook',
+    'instagram.com': 'Instagram',
+    'linkedin.com': 'LinkedIn',
+    'twitter.com': 'Twitter',
+    'x.com': 'Twitter',
+    't.co': 'Twitter',
+    'youtube.com': 'YouTube',
+    'reddit.com': 'Reddit',
+    'ads.reddit.com': 'Reddit',
+    'duck.ai': 'DuckDuckGo AI',
+    'duckduckgo.com': 'DuckDuckGo',
+    'duckduckgo': 'DuckDuckGo',
+    'kagi.com': 'Kagi',
+    'mail.google.com': 'Gmail',
+    'messages.google.com': 'Google Messages',
+    'groups.google.com': 'Google Groups',
+  };
+
+  // Check exact match first
+  if (sourceMap[normalized]) {
+    return sourceMap[normalized];
+  }
+
+  // Check partial matches
+  for (const [key, value] of Object.entries(sourceMap)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      return value;
+    }
+  }
+
+  // Return original with proper capitalization if no mapping found
+  return source;
+}
+
+// Aggregate sources with the same normalized name
+function aggregateSources(sources: SourceMetrics[]): SourceMetrics[] {
+  const aggregated = new Map<string, SourceMetrics>();
+
+  for (const source of sources) {
+    const normalizedName = normalizeSourceName(source.source);
+
+    if (aggregated.has(normalizedName)) {
+      const existing = aggregated.get(normalizedName)!;
+      existing.users += source.users;
+      existing.sessions += source.sessions;
+      existing.conversions += source.conversions;
+      existing.formSubmissions += source.formSubmissions;
+      existing.phoneCalls += source.phoneCalls;
+      // Recalculate click to lead rate
+      existing.clickToLeadRate = existing.sessions > 0
+        ? (existing.conversions / existing.sessions) * 100
+        : 0;
+      // Combine mediums if different
+      if (!existing.medium.includes(source.medium) && source.medium !== existing.medium) {
+        existing.medium = existing.medium + ', ' + source.medium;
+      }
+    } else {
+      aggregated.set(normalizedName, {
+        ...source,
+        source: normalizedName,
+      });
+    }
+  }
+
+  return Array.from(aggregated.values());
+}
+
 function categorizeSource(source: string, medium: string): string {
   const sourceLower = source.toLowerCase();
   const mediumLower = medium.toLowerCase();
@@ -373,8 +480,9 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
     }
   }
 
-  // Sort each category by sessions
+  // Aggregate and sort each category by sessions
   for (const key of Object.keys(breakdown) as Array<keyof DetailedChannelBreakdown>) {
+    breakdown[key] = aggregateSources(breakdown[key]);
     breakdown[key].sort((a, b) => b.sessions - a.sessions);
   }
 
