@@ -140,7 +140,7 @@ function categorizeSource(source: string, medium: string): string {
   const mediumLower = medium.toLowerCase();
 
   // Check for LLM/AI sources first (specific domains)
-  const llmMatches = ['chatgpt', 'openai', 'perplexity', 'claude.ai', 'anthropic', 'gemini', 'bard.google', 'copilot.microsoft', 'phind', 'poe.com', 'you.com', 'duck.ai', 'kagi.com'];
+  const llmMatches = ['chatgpt', 'openai', 'perplexity', 'claude.ai', 'anthropic', 'gemini', 'bard.google', 'copilot', 'phind', 'poe.com', 'you.com', 'duck.ai', 'kagi.com'];
   if (llmMatches.some(llm => sourceLower.includes(llm))) {
     return 'llmAI';
   }
