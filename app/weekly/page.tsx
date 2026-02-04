@@ -3,8 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  LineChart,
-  Line,
   AreaChart,
   Area,
   BarChart,
@@ -29,6 +27,29 @@ interface ChannelMetrics {
   formSubmissions: number;
   phoneCalls: number;
   clickToLeadRate: number;
+}
+
+interface SourceMetrics {
+  source: string;
+  medium: string;
+  category: string;
+  users: number;
+  sessions: number;
+  conversions: number;
+  formSubmissions: number;
+  phoneCalls: number;
+  clickToLeadRate: number;
+}
+
+interface DetailedBreakdown {
+  organicSearch: SourceMetrics[];
+  paidSearch: SourceMetrics[];
+  llmAI: SourceMetrics[];
+  listings: SourceMetrics[];
+  social: SourceMetrics[];
+  referral: SourceMetrics[];
+  direct: SourceMetrics[];
+  other: SourceMetrics[];
 }
 
 interface WeeklyTotals {
@@ -76,6 +97,7 @@ interface WeeklyData {
     sessions: number;
   }>;
   conversionsByChannel: ChannelMetrics[];
+  detailedBreakdown: DetailedBreakdown;
   comparison: {
     current: WeeklyTotals;
     lastYear: WeeklyTotals;
@@ -95,6 +117,30 @@ const CHANNEL_COLORS: Record<string, string> = {
   "Email": "#ef4444",
   "Display": "#84cc16",
 };
+
+const SOURCE_ICONS: Record<string, string> = {
+  google: "🔍",
+  bing: "🔎",
+  yahoo: "📧",
+  duckduckgo: "🦆",
+  chatgpt: "🤖",
+  perplexity: "🧠",
+  claude: "🟠",
+  yelp: "⭐",
+  clutch: "🏆",
+  facebook: "📘",
+  instagram: "📷",
+  linkedin: "💼",
+  twitter: "🐦",
+};
+
+function getSourceIcon(source: string): string {
+  const sourceLower = source.toLowerCase();
+  for (const [key, icon] of Object.entries(SOURCE_ICONS)) {
+    if (sourceLower.includes(key)) return icon;
+  }
+  return "🌐";
+}
 
 function MetricCard({
   title,
@@ -154,73 +200,80 @@ function MetricCard({
   );
 }
 
-function ChannelTable({ channels }: { channels: ChannelMetrics[] }) {
-  // Group channels into categories
-  const organicChannels = channels.filter(c =>
-    c.channel.toLowerCase().includes("organic")
-  );
-  const paidChannels = channels.filter(c =>
-    c.channel.toLowerCase().includes("paid")
-  );
-  const otherChannels = channels.filter(c =>
-    !c.channel.toLowerCase().includes("organic") &&
-    !c.channel.toLowerCase().includes("paid")
+function DetailedSourceTable({
+  title,
+  sources,
+  color,
+  icon
+}: {
+  title: string;
+  sources: SourceMetrics[];
+  color: string;
+  icon: string;
+}) {
+  const totals = sources.reduce(
+    (acc, s) => ({
+      sessions: acc.sessions + s.sessions,
+      conversions: acc.conversions + s.conversions,
+      forms: acc.forms + s.formSubmissions,
+      phones: acc.phones + s.phoneCalls,
+    }),
+    { sessions: 0, conversions: 0, forms: 0, phones: 0 }
   );
 
-  const renderChannelGroup = (title: string, channelList: ChannelMetrics[], color: string) => (
-    <div className="mb-6">
-      <h4 className={`text-sm font-semibold mb-3 px-2 py-1 rounded ${color}`}>{title}</h4>
+  if (sources.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className={`px-4 py-3 ${color}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{icon}</span>
+            <h3 className="font-semibold">{title}</h3>
+          </div>
+          <div className="flex gap-4 text-sm">
+            <span><strong>{totals.sessions.toLocaleString()}</strong> sessions</span>
+            <span><strong>{totals.conversions.toLocaleString()}</strong> leads</span>
+          </div>
+        </div>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-200">
-              <th className="text-left py-2 px-2 font-medium text-gray-500">Channel</th>
+            <tr className="border-b border-gray-200 bg-gray-50">
+              <th className="text-left py-2 px-4 font-medium text-gray-500">Source</th>
+              <th className="text-left py-2 px-2 font-medium text-gray-500">Medium</th>
               <th className="text-right py-2 px-2 font-medium text-gray-500">Sessions</th>
               <th className="text-right py-2 px-2 font-medium text-gray-500">Forms</th>
               <th className="text-right py-2 px-2 font-medium text-gray-500">Calls</th>
-              <th className="text-right py-2 px-2 font-medium text-gray-500">Total Leads</th>
-              <th className="text-right py-2 px-2 font-medium text-gray-500">Click→Lead</th>
+              <th className="text-right py-2 px-2 font-medium text-gray-500">Leads</th>
+              <th className="text-right py-2 px-4 font-medium text-gray-500">Conv. Rate</th>
             </tr>
           </thead>
           <tbody>
-            {channelList.map((channel, i) => (
+            {sources.map((source, i) => (
               <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                <td className="py-2 px-2">
+                <td className="py-2 px-4">
                   <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: CHANNEL_COLORS[channel.channel] || COLORS[i % COLORS.length] }}
-                    />
-                    <span className="font-medium text-gray-900">{channel.channel}</span>
+                    <span>{getSourceIcon(source.source)}</span>
+                    <span className="font-medium text-gray-900">{source.source}</span>
                   </div>
                 </td>
-                <td className="py-2 px-2 text-right text-gray-700">{channel.sessions.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-gray-700">{channel.formSubmissions.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-gray-700">{channel.phoneCalls.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right font-semibold text-gray-900">{channel.conversions.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right">
-                  <span className={`font-semibold ${channel.clickToLeadRate > 5 ? "text-green-600" : "text-gray-700"}`}>
-                    {channel.clickToLeadRate.toFixed(2)}%
+                <td className="py-2 px-2 text-gray-500">{source.medium}</td>
+                <td className="py-2 px-2 text-right text-gray-700">{source.sessions.toLocaleString()}</td>
+                <td className="py-2 px-2 text-right text-gray-700">{source.formSubmissions.toLocaleString()}</td>
+                <td className="py-2 px-2 text-right text-gray-700">{source.phoneCalls.toLocaleString()}</td>
+                <td className="py-2 px-2 text-right font-semibold text-gray-900">{source.conversions.toLocaleString()}</td>
+                <td className="py-2 px-4 text-right">
+                  <span className={`font-semibold ${source.clickToLeadRate > 5 ? "text-green-600" : source.clickToLeadRate > 2 ? "text-blue-600" : "text-gray-600"}`}>
+                    {source.clickToLeadRate.toFixed(2)}%
                   </span>
                 </td>
               </tr>
             ))}
-            {channelList.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-4 text-center text-gray-400">No data</td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
-    </div>
-  );
-
-  return (
-    <div>
-      {renderChannelGroup("Organic Channels", organicChannels, "bg-green-100 text-green-800")}
-      {renderChannelGroup("Paid Channels", paidChannels, "bg-blue-100 text-blue-800")}
-      {renderChannelGroup("Other Channels", otherChannels, "bg-gray-100 text-gray-800")}
     </div>
   );
 }
@@ -307,6 +360,8 @@ export default function WeeklyDashboard() {
     ...d,
     formattedDate: formatDate(d.date),
   }));
+
+  const breakdown = data.detailedBreakdown;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -431,10 +486,61 @@ export default function WeeklyDashboard() {
           </div>
         </section>
 
-        {/* Channel Breakdown */}
-        <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Performance by Channel</h2>
-          <ChannelTable channels={data.conversionsByChannel} />
+        {/* Detailed Channel Breakdowns */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Detailed Channel Performance</h2>
+          <div className="space-y-4">
+            <DetailedSourceTable
+              title="Organic Search"
+              sources={breakdown.organicSearch}
+              color="bg-green-100 text-green-800"
+              icon="🔍"
+            />
+            <DetailedSourceTable
+              title="Paid Search & Ads"
+              sources={breakdown.paidSearch}
+              color="bg-blue-100 text-blue-800"
+              icon="💰"
+            />
+            <DetailedSourceTable
+              title="AI / LLM Referrals"
+              sources={breakdown.llmAI}
+              color="bg-purple-100 text-purple-800"
+              icon="🤖"
+            />
+            <DetailedSourceTable
+              title="Listings & Directories"
+              sources={breakdown.listings}
+              color="bg-yellow-100 text-yellow-800"
+              icon="📋"
+            />
+            <DetailedSourceTable
+              title="Social Media"
+              sources={breakdown.social}
+              color="bg-pink-100 text-pink-800"
+              icon="📱"
+            />
+            <DetailedSourceTable
+              title="Referral Sites"
+              sources={breakdown.referral}
+              color="bg-orange-100 text-orange-800"
+              icon="🔗"
+            />
+            <DetailedSourceTable
+              title="Direct Traffic"
+              sources={breakdown.direct}
+              color="bg-gray-100 text-gray-800"
+              icon="🎯"
+            />
+            {breakdown.other.length > 0 && (
+              <DetailedSourceTable
+                title="Other Sources"
+                sources={breakdown.other}
+                color="bg-slate-100 text-slate-800"
+                icon="🌐"
+              />
+            )}
+          </div>
         </section>
 
         {/* Charts Row */}
@@ -484,10 +590,10 @@ export default function WeeklyDashboard() {
           </div>
         </div>
 
-        {/* Leads by Channel Pie + Sources */}
+        {/* Leads by Channel Pie + Top Pages */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Leads by Channel</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Leads by Channel Type</h3>
             <div className="flex items-center">
               <ResponsiveContainer width="50%" height={220}>
                 <PieChart>
@@ -527,23 +633,15 @@ export default function WeeklyDashboard() {
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Traffic Sources</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h3>
             <div className="space-y-3">
-              {data.trafficSources.slice(0, 8).map((source, i) => (
+              {data.topPages.slice(0, 7).map((page, i) => (
                 <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: COLORS[i % COLORS.length] }}
-                    />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{source.source}</p>
-                      <p className="text-xs text-gray-500">{source.medium}</p>
-                    </div>
+                  <div className="flex-1 min-w-0 mr-3">
+                    <p className="text-sm font-medium text-gray-900 truncate">{page.title || page.path}</p>
+                    <p className="text-xs text-gray-500 truncate">{page.path}</p>
                   </div>
-                  <span className="text-sm font-semibold text-gray-900">
-                    {source.sessions.toLocaleString()}
-                  </span>
+                  <span className="text-sm font-semibold text-gray-900">{page.pageviews.toLocaleString()}</span>
                 </div>
               ))}
             </div>
