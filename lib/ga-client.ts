@@ -98,13 +98,13 @@ export interface ConversionsByType {
   byChannel: ChannelMetrics[];
 }
 
-// Known LLM/AI sources
+// Known LLM/AI sources (exact matches or specific domains)
 const LLM_SOURCES = [
   'chatgpt.com', 'chat.openai.com', 'openai.com',
-  'perplexity.ai', 'perplexity',
+  'perplexity.ai',
   'claude.ai', 'anthropic.com',
   'bard.google.com', 'gemini.google.com',
-  'bing.com/chat', 'copilot.microsoft.com',
+  'copilot.microsoft.com',
   'you.com', 'phind.com', 'poe.com'
 ];
 
@@ -139,28 +139,33 @@ function categorizeSource(source: string, medium: string): string {
   const sourceLower = source.toLowerCase();
   const mediumLower = medium.toLowerCase();
 
-  // Check for LLM/AI sources
-  if (LLM_SOURCES.some(llm => sourceLower.includes(llm.split('.')[0]))) {
+  // Check for LLM/AI sources first (specific domains)
+  const llmMatches = ['chatgpt', 'openai', 'perplexity', 'claude.ai', 'anthropic', 'gemini.google', 'bard.google', 'copilot.microsoft', 'phind', 'poe.com', 'you.com'];
+  if (llmMatches.some(llm => sourceLower.includes(llm))) {
     return 'llmAI';
   }
 
-  // Check for listing sources
-  if (LISTING_SOURCES.some(listing => sourceLower.includes(listing.split('.')[0]))) {
+  // Check for listing/directory sources
+  const listingMatches = ['yelp', 'clutch', 'expertise', 'thumbtack', 'homeadvisor', 'angi', 'bbb.org', 'yellowpages', 'manta', 'nextdoor', 'avvo', 'justia', 'healthgrades', 'zocdoc', 'houzz', 'cpafee', 'designrush', 'upcity'];
+  if (listingMatches.some(listing => sourceLower.includes(listing))) {
     return 'listings';
   }
 
-  // Check medium for paid
-  if (mediumLower === 'cpc' || mediumLower === 'ppc' || mediumLower === 'paid' || mediumLower.includes('paid')) {
+  // Check medium for paid advertising
+  if (mediumLower === 'cpc' || mediumLower === 'ppc' || mediumLower === 'paid' || mediumLower.includes('paid') || mediumLower === 'display') {
     return 'paidSearch';
   }
 
-  // Check for organic search
-  if (mediumLower === 'organic' && ORGANIC_SEARCH_ENGINES.some(engine => sourceLower.includes(engine))) {
-    return 'organicSearch';
+  // Check for organic search engines
+  if (mediumLower === 'organic') {
+    if (ORGANIC_SEARCH_ENGINES.some(engine => sourceLower.includes(engine))) {
+      return 'organicSearch';
+    }
   }
 
-  // Check for social
-  if (mediumLower.includes('social') || ['facebook', 'instagram', 'twitter', 'linkedin', 'tiktok', 'pinterest'].some(s => sourceLower.includes(s))) {
+  // Check for social media
+  const socialMatches = ['facebook', 'instagram', 'twitter', 'linkedin', 'tiktok', 'pinterest', 'youtube', 'reddit'];
+  if (mediumLower.includes('social') || socialMatches.some(s => sourceLower.includes(s))) {
     return 'social';
   }
 
