@@ -31,27 +31,29 @@ interface ChannelMetrics {
   clickToLeadRate: number;
 }
 
+interface WeeklyTotals {
+  users: number;
+  newUsers: number;
+  sessions: number;
+  pageviews: number;
+  bounceRate: number;
+  engagementRate: number;
+  conversions: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  avgSessionDuration: number;
+  formSubmissions: number;
+  phoneCalls: number;
+  clickToLeadRate: number;
+}
+
 interface WeeklyData {
   period: {
     current: { startDate: string; endDate: string };
     lastYear: { startDate: string; endDate: string };
   };
-  totals: {
-    users: number;
-    newUsers: number;
-    sessions: number;
-    pageviews: number;
-    bounceRate: number;
-    engagementRate: number;
-    conversions: number;
-    impressions: number;
-    clicks: number;
-    ctr: number;
-    avgSessionDuration: number;
-    formSubmissions: number;
-    phoneCalls: number;
-    clickToLeadRate: number;
-  };
+  totals: WeeklyTotals;
   daily: Array<{
     date: string;
     users: number;
@@ -75,8 +77,8 @@ interface WeeklyData {
   }>;
   conversionsByChannel: ChannelMetrics[];
   comparison: {
-    current: typeof WeeklyData.prototype.totals;
-    lastYear: typeof WeeklyData.prototype.totals;
+    current: WeeklyTotals;
+    lastYear: WeeklyTotals;
     changes: Record<string, number>;
   };
 }
