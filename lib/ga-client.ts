@@ -140,13 +140,13 @@ function categorizeSource(source: string, medium: string): string {
   const mediumLower = medium.toLowerCase();
 
   // Check for LLM/AI sources first (specific domains)
-  const llmMatches = ['chatgpt', 'openai', 'perplexity', 'claude.ai', 'anthropic', 'gemini.google', 'bard.google', 'copilot.microsoft', 'phind', 'poe.com', 'you.com'];
+  const llmMatches = ['chatgpt', 'openai', 'perplexity', 'claude.ai', 'anthropic', 'gemini', 'bard.google', 'copilot.microsoft', 'phind', 'poe.com', 'you.com', 'duck.ai', 'kagi.com'];
   if (llmMatches.some(llm => sourceLower.includes(llm))) {
     return 'llmAI';
   }
 
   // Check for listing/directory sources
-  const listingMatches = ['yelp', 'clutch', 'expertise', 'thumbtack', 'homeadvisor', 'angi', 'bbb.org', 'yellowpages', 'manta', 'nextdoor', 'avvo', 'justia', 'healthgrades', 'zocdoc', 'houzz', 'cpafee', 'designrush', 'upcity'];
+  const listingMatches = ['yelp', 'clutch', 'expertise', 'thumbtack', 'homeadvisor', 'angi', 'bbb.org', 'yellowpages', 'manta', 'nextdoor', 'avvo', 'justia', 'healthgrades', 'zocdoc', 'houzz', 'cpafee', 'designrush', 'upcity', 'trustpilot', 'themanifest', 'bark.com', 'g2.com', 'capterra'];
   if (listingMatches.some(listing => sourceLower.includes(listing))) {
     return 'listings';
   }
@@ -156,27 +156,28 @@ function categorizeSource(source: string, medium: string): string {
     return 'paidSearch';
   }
 
-  // Check for organic search engines
+  // Check for organic search engines (including AOL)
+  const organicEngines = [...ORGANIC_SEARCH_ENGINES, 'aol'];
   if (mediumLower === 'organic') {
-    if (ORGANIC_SEARCH_ENGINES.some(engine => sourceLower.includes(engine))) {
+    if (organicEngines.some(engine => sourceLower.includes(engine))) {
       return 'organicSearch';
     }
   }
 
-  // Check for social media
-  const socialMatches = ['facebook', 'instagram', 'twitter', 'linkedin', 'tiktok', 'pinterest', 'youtube', 'reddit'];
-  if (mediumLower.includes('social') || socialMatches.some(s => sourceLower.includes(s))) {
+  // Check for social media (including t.co for Twitter)
+  const socialMatches = ['facebook', 'instagram', 'twitter', 'linkedin', 'tiktok', 'pinterest', 'youtube', 'reddit', 't.co', 'x.com'];
+  if (mediumLower.includes('social') || socialMatches.some(s => sourceLower === s || sourceLower.includes(s + '.'))) {
     return 'social';
+  }
+
+  // Check for direct
+  if (sourceLower === '(direct)' || sourceLower === 'website' || mediumLower === 'direct') {
+    return 'direct';
   }
 
   // Check for referral
   if (mediumLower === 'referral') {
     return 'referral';
-  }
-
-  // Check for direct
-  if (sourceLower === '(direct)' || mediumLower === '(none)' || mediumLower === 'direct') {
-    return 'direct';
   }
 
   return 'other';

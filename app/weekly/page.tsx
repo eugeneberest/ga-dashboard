@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   AreaChart,
@@ -105,6 +105,9 @@ interface WeeklyData {
   };
 }
 
+type SortDirection = "asc" | "desc";
+type SortField = "source" | "sessions" | "formSubmissions" | "phoneCalls" | "conversions" | "clickToLeadRate";
+
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
 
 const CHANNEL_COLORS: Record<string, string> = {
@@ -118,6 +121,17 @@ const CHANNEL_COLORS: Record<string, string> = {
   "Display": "#84cc16",
 };
 
+const CATEGORY_INFO: Record<string, { name: string; color: string; icon: string }> = {
+  organicSearch: { name: "Organic Search", color: "bg-green-100 text-green-800", icon: "🔍" },
+  paidSearch: { name: "Paid Search & Ads", color: "bg-blue-100 text-blue-800", icon: "💰" },
+  llmAI: { name: "AI / LLM Referrals", color: "bg-purple-100 text-purple-800", icon: "🤖" },
+  listings: { name: "Listings & Directories", color: "bg-yellow-100 text-yellow-800", icon: "📋" },
+  social: { name: "Social Media", color: "bg-pink-100 text-pink-800", icon: "📱" },
+  referral: { name: "Referral Sites", color: "bg-orange-100 text-orange-800", icon: "🔗" },
+  direct: { name: "Direct Traffic", color: "bg-gray-100 text-gray-800", icon: "🎯" },
+  other: { name: "Other Sources", color: "bg-slate-100 text-slate-800", icon: "🌐" },
+};
+
 const SOURCE_ICONS: Record<string, string> = {
   google: "🔍",
   bing: "🔎",
@@ -126,12 +140,16 @@ const SOURCE_ICONS: Record<string, string> = {
   chatgpt: "🤖",
   perplexity: "🧠",
   claude: "🟠",
+  gemini: "✨",
+  copilot: "🪟",
   yelp: "⭐",
   clutch: "🏆",
   facebook: "📘",
   instagram: "📷",
   linkedin: "💼",
   twitter: "🐦",
+  reddit: "🔴",
+  youtube: "▶️",
 };
 
 function getSourceIcon(source: string): string {
@@ -200,17 +218,193 @@ function MetricCard({
   );
 }
 
+function SortableHeader({
+  label,
+  field,
+  currentSort,
+  onSort,
+  align = "right",
+}: {
+  label: string;
+  field: SortField;
+  currentSort: { field: SortField; direction: SortDirection };
+  onSort: (field: SortField) => void;
+  align?: "left" | "right";
+}) {
+  const isActive = currentSort.field === field;
+  return (
+    <th
+      className={`py-2 px-2 font-medium text-gray-500 cursor-pointer hover:text-gray-700 select-none ${
+        align === "left" ? "text-left" : "text-right"
+      }`}
+      onClick={() => onSort(field)}
+    >
+      <div className={`flex items-center gap-1 ${align === "right" ? "justify-end" : ""}`}>
+        {label}
+        <span className={`text-xs ${isActive ? "text-blue-600" : "text-gray-300"}`}>
+          {isActive ? (currentSort.direction === "asc" ? "↑" : "↓") : "↕"}
+        </span>
+      </div>
+    </th>
+  );
+}
+
+function CategorySummaryTable({ breakdown }: { breakdown: DetailedBreakdown }) {
+  const [sort, setSort] = useState<{ field: SortField; direction: SortDirection }>({
+    field: "conversions",
+    direction: "desc",
+  });
+
+  const summaryData = useMemo(() => {
+    const categories = (Object.entries(breakdown) as [string, SourceMetrics[]][]).map(([key, sources]) => {
+      const info = CATEGORY_INFO[key];
+      const totals = sources.reduce(
+        (acc, s) => ({
+          sessions: acc.sessions + s.sessions,
+          conversions: acc.conversions + s.conversions,
+          formSubmissions: acc.formSubmissions + s.formSubmissions,
+          phoneCalls: acc.phoneCalls + s.phoneCalls,
+        }),
+        { sessions: 0, conversions: 0, formSubmissions: 0, phoneCalls: 0 }
+      );
+      return {
+        key,
+        name: info.name,
+        icon: info.icon,
+        color: info.color,
+        ...totals,
+        clickToLeadRate: totals.sessions > 0 ? (totals.conversions / totals.sessions) * 100 : 0,
+        sourceCount: sources.length,
+      };
+    });
+
+    return categories.sort((a, b) => {
+      const aVal = a[sort.field as keyof typeof a] as number;
+      const bVal = b[sort.field as keyof typeof b] as number;
+      return sort.direction === "asc" ? aVal - bVal : bVal - aVal;
+    });
+  }, [breakdown, sort]);
+
+  const handleSort = (field: SortField) => {
+    setSort((prev) => ({
+      field,
+      direction: prev.field === field && prev.direction === "desc" ? "asc" : "desc",
+    }));
+  };
+
+  const grandTotal = summaryData.reduce(
+    (acc, cat) => ({
+      sessions: acc.sessions + cat.sessions,
+      conversions: acc.conversions + cat.conversions,
+      formSubmissions: acc.formSubmissions + cat.formSubmissions,
+      phoneCalls: acc.phoneCalls + cat.phoneCalls,
+    }),
+    { sessions: 0, conversions: 0, formSubmissions: 0, phoneCalls: 0 }
+  );
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="px-6 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+        <h3 className="font-semibold text-lg">Summary by Category</h3>
+        <p className="text-indigo-100 text-sm">Click column headers to sort</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50">
+              <th className="text-left py-3 px-4 font-medium text-gray-500">Category</th>
+              <SortableHeader label="Sessions" field="sessions" currentSort={sort} onSort={handleSort} />
+              <SortableHeader label="Forms" field="formSubmissions" currentSort={sort} onSort={handleSort} />
+              <SortableHeader label="Calls" field="phoneCalls" currentSort={sort} onSort={handleSort} />
+              <SortableHeader label="Total Leads" field="conversions" currentSort={sort} onSort={handleSort} />
+              <SortableHeader label="Conv. Rate" field="clickToLeadRate" currentSort={sort} onSort={handleSort} />
+              <th className="text-right py-3 px-4 font-medium text-gray-500">Sources</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summaryData.filter(cat => cat.sessions > 0).map((cat) => (
+              <tr key={cat.key} className="border-b border-gray-50 hover:bg-gray-50">
+                <td className="py-3 px-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{cat.icon}</span>
+                    <span className="font-medium text-gray-900">{cat.name}</span>
+                  </div>
+                </td>
+                <td className="py-3 px-2 text-right text-gray-700">{cat.sessions.toLocaleString()}</td>
+                <td className="py-3 px-2 text-right text-gray-700">{cat.formSubmissions.toLocaleString()}</td>
+                <td className="py-3 px-2 text-right text-gray-700">{cat.phoneCalls.toLocaleString()}</td>
+                <td className="py-3 px-2 text-right font-semibold text-gray-900">{cat.conversions.toLocaleString()}</td>
+                <td className="py-3 px-2 text-right">
+                  <span className={`font-semibold ${cat.clickToLeadRate > 5 ? "text-green-600" : cat.clickToLeadRate > 2 ? "text-blue-600" : "text-gray-600"}`}>
+                    {cat.clickToLeadRate.toFixed(2)}%
+                  </span>
+                </td>
+                <td className="py-3 px-4 text-right text-gray-500">{cat.sourceCount}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-gray-100 font-semibold">
+              <td className="py-3 px-4 text-gray-900">Total</td>
+              <td className="py-3 px-2 text-right text-gray-900">{grandTotal.sessions.toLocaleString()}</td>
+              <td className="py-3 px-2 text-right text-gray-900">{grandTotal.formSubmissions.toLocaleString()}</td>
+              <td className="py-3 px-2 text-right text-gray-900">{grandTotal.phoneCalls.toLocaleString()}</td>
+              <td className="py-3 px-2 text-right text-gray-900">{grandTotal.conversions.toLocaleString()}</td>
+              <td className="py-3 px-2 text-right text-gray-900">
+                {grandTotal.sessions > 0 ? ((grandTotal.conversions / grandTotal.sessions) * 100).toFixed(2) : 0}%
+              </td>
+              <td className="py-3 px-4 text-right text-gray-500">-</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DetailedSourceTable({
   title,
   sources,
   color,
-  icon
+  icon,
+  defaultExpanded = true,
 }: {
   title: string;
   sources: SourceMetrics[];
   color: string;
   icon: string;
+  defaultExpanded?: boolean;
 }) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [sort, setSort] = useState<{ field: SortField; direction: SortDirection }>({
+    field: "sessions",
+    direction: "desc",
+  });
+
+  const sortedSources = useMemo(() => {
+    return [...sources].sort((a, b) => {
+      let aVal: number | string = a[sort.field as keyof SourceMetrics] as number | string;
+      let bVal: number | string = b[sort.field as keyof SourceMetrics] as number | string;
+
+      if (sort.field === "source") {
+        aVal = String(aVal).toLowerCase();
+        bVal = String(bVal).toLowerCase();
+        return sort.direction === "asc"
+          ? aVal.localeCompare(bVal as string)
+          : (bVal as string).localeCompare(aVal as string);
+      }
+
+      return sort.direction === "asc" ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+  }, [sources, sort]);
+
+  const handleSort = (field: SortField) => {
+    setSort((prev) => ({
+      field,
+      direction: prev.field === field && prev.direction === "desc" ? "asc" : "desc",
+    }));
+  };
+
   const totals = sources.reduce(
     (acc, s) => ({
       sessions: acc.sessions + s.sessions,
@@ -225,55 +419,76 @@ function DetailedSourceTable({
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className={`px-4 py-3 ${color}`}>
+      <div
+        className={`px-4 py-3 ${color} cursor-pointer`}
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xl">{icon}</span>
             <h3 className="font-semibold">{title}</h3>
+            <span className="text-sm opacity-75">({sources.length} sources)</span>
           </div>
-          <div className="flex gap-4 text-sm">
-            <span><strong>{totals.sessions.toLocaleString()}</strong> sessions</span>
-            <span><strong>{totals.conversions.toLocaleString()}</strong> leads</span>
+          <div className="flex items-center gap-4">
+            <div className="flex gap-4 text-sm">
+              <span><strong>{totals.sessions.toLocaleString()}</strong> sessions</span>
+              <span><strong>{totals.conversions.toLocaleString()}</strong> leads</span>
+            </div>
+            <span className="text-lg">{isExpanded ? "▼" : "▶"}</span>
           </div>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left py-2 px-4 font-medium text-gray-500">Source</th>
-              <th className="text-left py-2 px-2 font-medium text-gray-500">Medium</th>
-              <th className="text-right py-2 px-2 font-medium text-gray-500">Sessions</th>
-              <th className="text-right py-2 px-2 font-medium text-gray-500">Forms</th>
-              <th className="text-right py-2 px-2 font-medium text-gray-500">Calls</th>
-              <th className="text-right py-2 px-2 font-medium text-gray-500">Leads</th>
-              <th className="text-right py-2 px-4 font-medium text-gray-500">Conv. Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sources.map((source, i) => (
-              <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                <td className="py-2 px-4">
-                  <div className="flex items-center gap-2">
-                    <span>{getSourceIcon(source.source)}</span>
-                    <span className="font-medium text-gray-900">{source.source}</span>
-                  </div>
-                </td>
-                <td className="py-2 px-2 text-gray-500">{source.medium}</td>
-                <td className="py-2 px-2 text-right text-gray-700">{source.sessions.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-gray-700">{source.formSubmissions.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-gray-700">{source.phoneCalls.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right font-semibold text-gray-900">{source.conversions.toLocaleString()}</td>
-                <td className="py-2 px-4 text-right">
-                  <span className={`font-semibold ${source.clickToLeadRate > 5 ? "text-green-600" : source.clickToLeadRate > 2 ? "text-blue-600" : "text-gray-600"}`}>
-                    {source.clickToLeadRate.toFixed(2)}%
-                  </span>
+      {isExpanded && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <SortableHeader label="Source" field="source" currentSort={sort} onSort={handleSort} align="left" />
+                <th className="text-left py-2 px-2 font-medium text-gray-500">Medium</th>
+                <SortableHeader label="Sessions" field="sessions" currentSort={sort} onSort={handleSort} />
+                <SortableHeader label="Forms" field="formSubmissions" currentSort={sort} onSort={handleSort} />
+                <SortableHeader label="Calls" field="phoneCalls" currentSort={sort} onSort={handleSort} />
+                <SortableHeader label="Leads" field="conversions" currentSort={sort} onSort={handleSort} />
+                <SortableHeader label="Conv. Rate" field="clickToLeadRate" currentSort={sort} onSort={handleSort} />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedSources.map((source, i) => (
+                <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="py-2 px-4">
+                    <div className="flex items-center gap-2">
+                      <span>{getSourceIcon(source.source)}</span>
+                      <span className="font-medium text-gray-900">{source.source}</span>
+                    </div>
+                  </td>
+                  <td className="py-2 px-2 text-gray-500">{source.medium}</td>
+                  <td className="py-2 px-2 text-right text-gray-700">{source.sessions.toLocaleString()}</td>
+                  <td className="py-2 px-2 text-right text-gray-700">{source.formSubmissions.toLocaleString()}</td>
+                  <td className="py-2 px-2 text-right text-gray-700">{source.phoneCalls.toLocaleString()}</td>
+                  <td className="py-2 px-2 text-right font-semibold text-gray-900">{source.conversions.toLocaleString()}</td>
+                  <td className="py-2 px-4 text-right">
+                    <span className={`font-semibold ${source.clickToLeadRate > 5 ? "text-green-600" : source.clickToLeadRate > 2 ? "text-blue-600" : "text-gray-600"}`}>
+                      {source.clickToLeadRate.toFixed(2)}%
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-50 font-semibold">
+                <td className="py-2 px-4 text-gray-900" colSpan={2}>Total</td>
+                <td className="py-2 px-2 text-right text-gray-900">{totals.sessions.toLocaleString()}</td>
+                <td className="py-2 px-2 text-right text-gray-900">{totals.forms.toLocaleString()}</td>
+                <td className="py-2 px-2 text-right text-gray-900">{totals.phones.toLocaleString()}</td>
+                <td className="py-2 px-2 text-right text-gray-900">{totals.conversions.toLocaleString()}</td>
+                <td className="py-2 px-4 text-right text-gray-900">
+                  {totals.sessions > 0 ? ((totals.conversions / totals.sessions) * 100).toFixed(2) : 0}%
                 </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -486,9 +701,16 @@ export default function WeeklyDashboard() {
           </div>
         </section>
 
+        {/* Category Summary Table */}
+        <section>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Performance Overview</h2>
+          <CategorySummaryTable breakdown={breakdown} />
+        </section>
+
         {/* Detailed Channel Breakdowns */}
         <section>
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Detailed Channel Performance</h2>
+          <p className="text-gray-500 text-sm mb-4">Click headers to sort • Click category headers to expand/collapse</p>
           <div className="space-y-4">
             <DetailedSourceTable
               title="Organic Search"
@@ -515,22 +737,24 @@ export default function WeeklyDashboard() {
               icon="📋"
             />
             <DetailedSourceTable
+              title="Direct Traffic"
+              sources={breakdown.direct}
+              color="bg-gray-200 text-gray-800"
+              icon="🎯"
+            />
+            <DetailedSourceTable
               title="Social Media"
               sources={breakdown.social}
               color="bg-pink-100 text-pink-800"
               icon="📱"
+              defaultExpanded={false}
             />
             <DetailedSourceTable
               title="Referral Sites"
               sources={breakdown.referral}
               color="bg-orange-100 text-orange-800"
               icon="🔗"
-            />
-            <DetailedSourceTable
-              title="Direct Traffic"
-              sources={breakdown.direct}
-              color="bg-gray-100 text-gray-800"
-              icon="🎯"
+              defaultExpanded={false}
             />
             {breakdown.other.length > 0 && (
               <DetailedSourceTable
@@ -538,6 +762,7 @@ export default function WeeklyDashboard() {
                 sources={breakdown.other}
                 color="bg-slate-100 text-slate-800"
                 icon="🌐"
+                defaultExpanded={false}
               />
             )}
           </div>
