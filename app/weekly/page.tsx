@@ -628,7 +628,7 @@ export default function WeeklyDashboard() {
         {/* Primary Metrics - Forms, Calls, Click to Lead */}
         <section>
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Lead Generation</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <MetricCard
               title="Form Submissions"
               value={data.totals.formSubmissions}
@@ -662,48 +662,19 @@ export default function WeeklyDashboard() {
               icon="📈"
               highlight={true}
             />
-          </div>
-        </section>
-
-        {/* Search Performance */}
-        <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Search Performance</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetricCard
-              title="Impressions"
-              value={data.totals.impressions}
-              change={data.comparison.changes.impressions}
-              lastYearValue={data.comparison.lastYear.impressions}
-              icon="👀"
-            />
-            <MetricCard
-              title="Clicks"
-              value={data.totals.clicks}
-              change={data.comparison.changes.clicks}
-              lastYearValue={data.comparison.lastYear.clicks}
-              icon="🖱"
-            />
-            <MetricCard
-              title="CTR (Impression → Click)"
-              value={data.totals.ctr}
-              change={data.comparison.changes.ctr}
-              lastYearValue={data.comparison.lastYear.ctr}
-              format="percent"
-              icon="📊"
-            />
             <MetricCard
               title="Users"
               value={data.totals.users}
               change={data.comparison.changes.users}
               lastYearValue={data.comparison.lastYear.users}
               icon="👥"
+              highlight={true}
             />
           </div>
         </section>
 
-        {/* Category Summary Table */}
+        {/* Category Summary Table - Moved to top for quick overview */}
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Performance Overview</h2>
           <CategorySummaryTable breakdown={breakdown} />
         </section>
 

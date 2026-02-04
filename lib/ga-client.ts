@@ -136,7 +136,8 @@ const PAID_SEARCH_SOURCES = [
 ];
 
 // Normalize source names to group similar sources together
-function normalizeSourceName(source: string): string {
+// Category is used to apply different normalization rules for different contexts
+function normalizeSourceName(source: string, category?: string): string {
   const sourceLower = source.toLowerCase().trim();
 
   // Remove www. prefix
@@ -151,8 +152,8 @@ function normalizeSourceName(source: string): string {
   // Remove lm. prefix
   normalized = normalized.replace(/^lm\./, '');
 
-  // Normalize specific sources
-  const sourceMap: Record<string, string> = {
+  // LLM/AI specific mappings - only apply in llmAI category
+  const llmSourceMap: Record<string, string> = {
     'chatgpt.com': 'ChatGPT',
     'chat.openai.com': 'ChatGPT',
     'openai.com': 'OpenAI',
@@ -166,6 +167,12 @@ function normalizeSourceName(source: string): string {
     'gemini': 'Google Gemini',
     'copilot.com': 'Microsoft Copilot',
     'copilot.microsoft.com': 'Microsoft Copilot',
+    'duck.ai': 'DuckDuckGo AI',
+    'kagi.com': 'Kagi',
+  };
+
+  // General source mappings (applies to all categories except organic search for some)
+  const generalSourceMap: Record<string, string> = {
     'yelp.com': 'Yelp',
     'yelp': 'Yelp',
     'yelp_organic': 'Yelp',
@@ -187,22 +194,55 @@ function normalizeSourceName(source: string): string {
     'youtube.com': 'YouTube',
     'reddit.com': 'Reddit',
     'ads.reddit.com': 'Reddit',
-    'duck.ai': 'DuckDuckGo AI',
     'duckduckgo.com': 'DuckDuckGo',
     'duckduckgo': 'DuckDuckGo',
-    'kagi.com': 'Kagi',
     'mail.google.com': 'Gmail',
     'messages.google.com': 'Google Messages',
     'groups.google.com': 'Google Groups',
   };
 
-  // Check exact match first
-  if (sourceMap[normalized]) {
-    return sourceMap[normalized];
+  // Organic search engine mappings - use proper search engine names
+  const organicSearchMap: Record<string, string> = {
+    'google': 'Google',
+    'bing': 'Bing',
+    'yahoo': 'Yahoo',
+    'duckduckgo': 'DuckDuckGo',
+    'baidu': 'Baidu',
+    'yandex': 'Yandex',
+    'ecosia': 'Ecosia',
+    'brave': 'Brave',
+    'startpage': 'Startpage',
+    'aol': 'AOL',
+  };
+
+  // Apply LLM mappings only for llmAI category
+  if (category === 'llmAI') {
+    if (llmSourceMap[normalized]) {
+      return llmSourceMap[normalized];
+    }
+    for (const [key, value] of Object.entries(llmSourceMap)) {
+      if (normalized.includes(key) || key.includes(normalized)) {
+        return value;
+      }
+    }
   }
 
-  // Check partial matches
-  for (const [key, value] of Object.entries(sourceMap)) {
+  // Apply organic search mappings for organicSearch category
+  if (category === 'organicSearch') {
+    for (const [key, value] of Object.entries(organicSearchMap)) {
+      if (normalized.includes(key)) {
+        return value;
+      }
+    }
+  }
+
+  // Apply general mappings
+  if (generalSourceMap[normalized]) {
+    return generalSourceMap[normalized];
+  }
+
+  // Check partial matches for general mappings
+  for (const [key, value] of Object.entries(generalSourceMap)) {
     if (normalized.includes(key) || key.includes(normalized)) {
       return value;
     }
@@ -213,11 +253,12 @@ function normalizeSourceName(source: string): string {
 }
 
 // Aggregate sources with the same normalized name
-function aggregateSources(sources: SourceMetrics[]): SourceMetrics[] {
+// Category is passed to apply context-specific normalization
+function aggregateSources(sources: SourceMetrics[], category: string): SourceMetrics[] {
   const aggregated = new Map<string, SourceMetrics>();
 
   for (const source of sources) {
-    const normalizedName = normalizeSourceName(source.source);
+    const normalizedName = normalizeSourceName(source.source, category);
 
     if (aggregated.has(normalizedName)) {
       const existing = aggregated.get(normalizedName)!;
@@ -485,7 +526,7 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
 
   // Aggregate and sort each category by sessions
   for (const key of Object.keys(breakdown) as Array<keyof DetailedChannelBreakdown>) {
-    breakdown[key] = aggregateSources(breakdown[key]);
+    breakdown[key] = aggregateSources(breakdown[key], key);
     breakdown[key].sort((a, b) => b.sessions - a.sessions);
   }
 
