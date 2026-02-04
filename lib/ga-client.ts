@@ -459,7 +459,7 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
   });
 
   const formEventNames = ['form_submit', 'generate_lead', 'contact_form', 'form_submission', 'submit_form', 'lead_form'];
-  const phoneEventNames = ['phone_click', 'click_to_call', 'tel_click', 'phone_call', 'call_click', 'phone'];
+  const phoneEventNames = ['phone_click', 'click_to_call', 'tel_click', 'phone_call', 'call_click', 'phone', 'phonecall'];
 
   // Build event data map
   const eventData: Map<string, { forms: number; phones: number }> = new Map();
@@ -578,7 +578,7 @@ export async function getConversionsByChannel(dateRange: DateRange): Promise<Con
 
   // Process events to categorize form submissions and phone calls
   const formEventNames = ['form_submit', 'generate_lead', 'contact_form', 'form_submission', 'submit_form', 'lead_form'];
-  const phoneEventNames = ['phone_click', 'click_to_call', 'tel_click', 'phone_call', 'call_click', 'phone'];
+  const phoneEventNames = ['phone_click', 'click_to_call', 'tel_click', 'phone_call', 'call_click', 'phone', 'phonecall'];
 
   const channelData: Map<string, { forms: number; phones: number }> = new Map();
   let totalForms = 0;
