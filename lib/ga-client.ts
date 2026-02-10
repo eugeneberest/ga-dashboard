@@ -479,9 +479,6 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
     limit: 1000,
   });
 
-  const formEventNames = ['form_submit', 'generate_lead', 'contact_form', 'form_submission', 'submit_form', 'lead_form'];
-  const phoneEventNames = ['phone_click', 'click_to_call', 'tel_click', 'phone_call', 'call_click', 'phone', 'phonecall'];
-
   // Build event data map and track all sources with events
   const eventData: Map<string, { forms: number; phones: number; source: string; medium: string }> = new Map();
   if (eventsResponse.rows) {
@@ -497,9 +494,9 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
       }
       const data = eventData.get(key)!;
 
-      if (formEventNames.some(e => eventName.includes(e))) {
+      if (eventName === 'form') {
         data.forms += count;
-      } else if (phoneEventNames.some(e => eventName.includes(e))) {
+      } else if (eventName === 'phone_call') {
         data.phones += count;
       }
     }
@@ -619,9 +616,6 @@ export async function getConversionsByChannel(dateRange: DateRange): Promise<Con
   }
 
   // Process events to categorize form submissions and phone calls
-  const formEventNames = ['form_submit', 'generate_lead', 'contact_form', 'form_submission', 'submit_form', 'lead_form'];
-  const phoneEventNames = ['phone_click', 'click_to_call', 'tel_click', 'phone_call', 'call_click', 'phone', 'phonecall'];
-
   const channelData: Map<string, { forms: number; phones: number }> = new Map();
   let totalForms = 0;
   let totalPhones = 0;
@@ -638,10 +632,10 @@ export async function getConversionsByChannel(dateRange: DateRange): Promise<Con
 
       const data = channelData.get(channel)!;
 
-      if (formEventNames.some(e => eventName.includes(e))) {
+      if (eventName === 'form') {
         data.forms += count;
         totalForms += count;
-      } else if (phoneEventNames.some(e => eventName.includes(e))) {
+      } else if (eventName === 'phone_call') {
         data.phones += count;
         totalPhones += count;
       }
