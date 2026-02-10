@@ -496,11 +496,13 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
     limit: 10000,
   });
 
-  // Get phone_call events with event-scoped dimensions for debug table
+  // Get phone_call events for debug table (separate query filtered to phone_call only)
+  // Note: GA4 API doesn't allow event-scoped source/medium with eventCount metric,
+  // so we use sessionSource/sessionMedium which are compatible
   const [rawPhoneResponse] = await analyticsDataClient.runReport({
     property: propertyId,
     dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
-    dimensions: [{ name: "source" }, { name: "medium" }],
+    dimensions: [{ name: "sessionSource" }, { name: "sessionMedium" }],
     metrics: [{ name: "eventCount" }],
     dimensionFilter: {
       filter: {

@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   const lastYearPeriod = getSameWeekLastYear(currentPeriod);
 
   try {
-    const [weeklyData, leads, topPages, trafficSources, comparison, conversionsByChannel, detailedBreakdown] = await Promise.all([
+    const [weeklyData, leads, topPages, trafficSources, comparison, conversionsByChannel, detailedBreakdownResult] = await Promise.all([
       getWeeklyDashboardMetrics(currentPeriod),
       getLeadsAndConversions(currentPeriod),
       getTopPages(currentPeriod, 10),
@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
       getConversionsByChannel(currentPeriod),
       getDetailedChannelBreakdown(currentPeriod),
     ]);
+
+    const { breakdown: detailedBreakdown, rawPhoneCallsBySource } = detailedBreakdownResult;
 
     // Calculate click to lead rate
     const clickToLeadRate = weeklyData.totals.clicks > 0
@@ -64,6 +66,7 @@ export async function GET(request: NextRequest) {
         trafficSources,
         conversionsByChannel: conversionsByChannel.byChannel,
         detailedBreakdown,
+        rawPhoneCallsBySource,
         comparison: {
           current: comparison.current,
           lastYear: comparison.lastYear,

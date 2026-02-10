@@ -69,6 +69,12 @@ interface WeeklyTotals {
   clickToLeadRate: number;
 }
 
+interface RawPhoneCall {
+  source: string;
+  medium: string;
+  count: number;
+}
+
 interface WeeklyData {
   period: {
     current: { startDate: string; endDate: string };
@@ -98,6 +104,7 @@ interface WeeklyData {
   }>;
   conversionsByChannel: ChannelMetrics[];
   detailedBreakdown: DetailedBreakdown;
+  rawPhoneCallsBySource: RawPhoneCall[];
   comparison: {
     current: WeeklyTotals;
     lastYear: WeeklyTotals;
@@ -876,6 +883,45 @@ export default function WeeklyDashboard() {
             </div>
           </div>
         </div>
+        {/* Debug: Raw phone_call events by source (before redistribution) */}
+        {data.rawPhoneCallsBySource && data.rawPhoneCallsBySource.length > 0 && (
+          <section>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+                <h3 className="font-semibold text-lg">Debug: Raw phone_call Events by Source</h3>
+                <p className="text-amber-100 text-sm">Raw GA4 data before (not set) redistribution. Compare with GA4 Events &gt; phone_call report.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="text-left py-3 px-4 font-medium text-gray-500">Source</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-500">Medium</th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-500">Phone Calls</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.rawPhoneCallsBySource.map((row, i) => (
+                      <tr key={i} className={`border-b border-gray-50 hover:bg-gray-50 ${row.source === '(not set)' ? 'bg-amber-50' : ''}`}>
+                        <td className="py-2 px-4 font-medium text-gray-900">{row.source}</td>
+                        <td className="py-2 px-4 text-gray-500">{row.medium}</td>
+                        <td className="py-2 px-4 text-right font-semibold text-gray-900">{row.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-100 font-semibold">
+                      <td className="py-3 px-4 text-gray-900" colSpan={2}>Total</td>
+                      <td className="py-3 px-4 text-right text-gray-900">
+                        {data.rawPhoneCallsBySource.reduce((sum, r) => sum + r.count, 0)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
       </main>
 
       <footer className="bg-white border-t border-gray-200 mt-8">
