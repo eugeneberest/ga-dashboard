@@ -1053,22 +1053,27 @@ export async function compareWithLastYear(
     return ((curr - prev) / prev) * 100;
   };
 
-  const currentClickToLead = currentData.totals.clicks > 0
-    ? (currentConversions.totalConversions / currentData.totals.clicks) * 100
+  const currentTotalLeads = currentConversions.totalConversions;
+  const lastYearTotalLeads = lastYearConversions.totalConversions;
+
+  const currentClickToLead = currentData.totals.sessions > 0
+    ? (currentTotalLeads / currentData.totals.sessions) * 100
     : 0;
-  const lastYearClickToLead = lastYearData.totals.clicks > 0
-    ? (lastYearConversions.totalConversions / lastYearData.totals.clicks) * 100
+  const lastYearClickToLead = lastYearData.totals.sessions > 0
+    ? (lastYearTotalLeads / lastYearData.totals.sessions) * 100
     : 0;
 
   return {
     current: {
       ...currentData.totals,
+      conversions: currentTotalLeads,
       formSubmissions: currentConversions.formSubmissions,
       phoneCalls: currentConversions.phoneCalls,
       clickToLeadRate: currentClickToLead,
     },
     lastYear: {
       ...lastYearData.totals,
+      conversions: lastYearTotalLeads,
       formSubmissions: lastYearConversions.formSubmissions,
       phoneCalls: lastYearConversions.phoneCalls,
       clickToLeadRate: lastYearClickToLead,
@@ -1078,7 +1083,7 @@ export async function compareWithLastYear(
       newUsers: calculateChange(currentData.totals.newUsers, lastYearData.totals.newUsers),
       sessions: calculateChange(currentData.totals.sessions, lastYearData.totals.sessions),
       pageviews: calculateChange(currentData.totals.pageviews, lastYearData.totals.pageviews),
-      conversions: calculateChange(currentData.totals.conversions, lastYearData.totals.conversions),
+      conversions: calculateChange(currentTotalLeads, lastYearTotalLeads),
       impressions: calculateChange(currentData.totals.impressions, lastYearData.totals.impressions),
       clicks: calculateChange(currentData.totals.clicks, lastYearData.totals.clicks),
       ctr: calculateChange(currentData.totals.ctr, lastYearData.totals.ctr),

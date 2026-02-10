@@ -42,9 +42,21 @@ export async function GET(request: NextRequest) {
 
     const { breakdown: detailedBreakdown, rawPhoneCallsBySource } = detailedBreakdownResult;
 
-    // Calculate click to lead rate
-    const clickToLeadRate = weeklyData.totals.clicks > 0
-      ? (weeklyData.totals.conversions / weeklyData.totals.clicks) * 100
+    // Aggregate totals from detailed breakdown (same data the tables use)
+    const allSources = Object.values(detailedBreakdown).flat();
+    const breakdownTotals = allSources.reduce(
+      (acc, s) => ({
+        sessions: acc.sessions + s.sessions,
+        users: acc.users + s.users,
+        conversions: acc.conversions + s.conversions,
+        formSubmissions: acc.formSubmissions + s.formSubmissions,
+        phoneCalls: acc.phoneCalls + s.phoneCalls,
+      }),
+      { sessions: 0, users: 0, conversions: 0, formSubmissions: 0, phoneCalls: 0 }
+    );
+
+    const clickToLeadRate = breakdownTotals.sessions > 0
+      ? (breakdownTotals.conversions / breakdownTotals.sessions) * 100
       : 0;
 
     return NextResponse.json({
@@ -56,8 +68,10 @@ export async function GET(request: NextRequest) {
         },
         totals: {
           ...weeklyData.totals,
-          formSubmissions: conversionsByChannel.formSubmissions,
-          phoneCalls: conversionsByChannel.phoneCalls,
+          users: breakdownTotals.users,
+          conversions: breakdownTotals.conversions,
+          formSubmissions: breakdownTotals.formSubmissions,
+          phoneCalls: breakdownTotals.phoneCalls,
           clickToLeadRate,
         },
         daily: weeklyData.daily,
