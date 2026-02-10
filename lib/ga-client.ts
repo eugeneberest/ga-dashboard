@@ -455,7 +455,16 @@ export async function getAggregatedMetrics(dateRange: DateRange): Promise<{
   };
 }
 
-export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise<DetailedChannelBreakdown> {
+export interface RawPhoneCallBySource {
+  source: string;
+  medium: string;
+  count: number;
+}
+
+export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise<{
+  breakdown: DetailedChannelBreakdown;
+  rawPhoneCallsBySource: RawPhoneCallBySource[];
+}> {
   // Get data by source/medium - increased limit to capture more sources
   const [sourceResponse] = await analyticsDataClient.runReport({
     property: propertyId,
@@ -470,25 +479,73 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
     limit: 500,
   });
 
-  // Get form submissions and phone calls by source/medium - increased limit
+  // Get form submissions and phone calls by source/medium - filter to only target events
   const [eventsResponse] = await analyticsDataClient.runReport({
     property: propertyId,
     dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
     dimensions: [{ name: "sessionSource" }, { name: "sessionMedium" }, { name: "eventName" }],
     metrics: [{ name: "eventCount" }],
-    limit: 1000,
+    dimensionFilter: {
+      filter: {
+        fieldName: "eventName",
+        inListFilter: {
+          values: ["form", "phone_call"],
+        },
+      },
+    },
+    limit: 10000,
   });
+
+  // Get phone_call events with event-scoped dimensions for debug table
+  const [rawPhoneResponse] = await analyticsDataClient.runReport({
+    property: propertyId,
+    dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
+    dimensions: [{ name: "source" }, { name: "medium" }],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: {
+        fieldName: "eventName",
+        stringFilter: { matchType: "EXACT", value: "phone_call" },
+      },
+    },
+    orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+    limit: 100,
+  });
+
+  // Build raw phone_call debug table from event-scoped response
+  const rawPhoneCallsBySource: RawPhoneCallBySource[] = [];
+  if (rawPhoneResponse.rows) {
+    for (const row of rawPhoneResponse.rows) {
+      rawPhoneCallsBySource.push({
+        source: row.dimensionValues?.[0]?.value || "(not set)",
+        medium: row.dimensionValues?.[1]?.value || "(not set)",
+        count: parseInt(row.metricValues?.[0]?.value || "0"),
+      });
+    }
+  }
 
   // Build event data map and track all sources with events
   const eventData: Map<string, { forms: number; phones: number; source: string; medium: string }> = new Map();
+  let unattributedForms = 0;
+  let unattributedPhones = 0;
+
   if (eventsResponse.rows) {
     for (const row of eventsResponse.rows) {
       const source = row.dimensionValues?.[0]?.value || "";
       const medium = row.dimensionValues?.[1]?.value || "";
       const eventName = (row.dimensionValues?.[2]?.value || "").toLowerCase();
       const count = parseInt(row.metricValues?.[0]?.value || "0");
-      const key = `${source}|${medium}`;
 
+      // Track unattributed events separately for redistribution
+      const isUnattributed = !source || source === "(not set)" || source === "(none)";
+
+      if (isUnattributed) {
+        if (eventName === 'form') unattributedForms += count;
+        else if (eventName === 'phone_call') unattributedPhones += count;
+        continue;
+      }
+
+      const key = `${source}|${medium}`;
       if (!eventData.has(key)) {
         eventData.set(key, { forms: 0, phones: 0, source, medium });
       }
@@ -504,6 +561,7 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
 
   // Build source data map from sessions query
   const sourceData: Map<string, { users: number; sessions: number; conversions: number; source: string; medium: string }> = new Map();
+  let totalSessions = 0;
   if (sourceResponse.rows) {
     for (const row of sourceResponse.rows) {
       const source = row.dimensionValues?.[0]?.value || "";
@@ -514,6 +572,23 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
       const key = `${source}|${medium}`;
 
       sourceData.set(key, { users, sessions, conversions, source, medium });
+      if (source && source !== "(not set)" && source !== "(none)") {
+        totalSessions += sessions;
+      }
+    }
+  }
+
+  // Redistribute unattributed events proportionally based on session counts
+  if ((unattributedForms > 0 || unattributedPhones > 0) && totalSessions > 0) {
+    for (const [key, data] of sourceData) {
+      if (!data.source || data.source === "(not set)" || data.source === "(none)") continue;
+      const proportion = data.sessions / totalSessions;
+      if (!eventData.has(key)) {
+        eventData.set(key, { forms: 0, phones: 0, source: data.source, medium: data.medium });
+      }
+      const events = eventData.get(key)!;
+      events.forms += Math.round(unattributedForms * proportion);
+      events.phones += Math.round(unattributedPhones * proportion);
     }
   }
 
@@ -540,8 +615,8 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
     const source = sessions.source || events.source;
     const medium = sessions.medium || events.medium;
 
-    // Skip if no source
-    if (!source) continue;
+    // Skip unattributed or empty sources
+    if (!source || source === "(not set)" || source === "(none)") continue;
 
     const category = categorizeSource(source, medium);
 
@@ -569,7 +644,7 @@ export async function getDetailedChannelBreakdown(dateRange: DateRange): Promise
     });
   }
 
-  return breakdown;
+  return { breakdown, rawPhoneCallsBySource };
 }
 
 export async function getConversionsByChannel(dateRange: DateRange): Promise<ConversionsByType> {
@@ -586,12 +661,20 @@ export async function getConversionsByChannel(dateRange: DateRange): Promise<Con
     orderBys: [{ metric: { metricName: "conversions" }, desc: true }],
   });
 
-  // Get form submissions and phone calls by event name and channel
+  // Get form submissions and phone calls by event name and channel - filter to only target events
   const [eventsResponse] = await analyticsDataClient.runReport({
     property: propertyId,
     dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
     dimensions: [{ name: "sessionDefaultChannelGroup" }, { name: "eventName" }],
     metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: {
+        fieldName: "eventName",
+        inListFilter: {
+          values: ["form", "phone_call"],
+        },
+      },
+    },
   });
 
   // Get clicks data by channel (from Search Console if available)
