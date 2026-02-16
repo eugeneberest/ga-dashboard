@@ -9,6 +9,17 @@ import DatePicker from "./components/DatePicker";
 import AIChat from "./components/AIChat";
 import TopPagesTable from "./components/TopPagesTable";
 import AlertsSection from "./components/AlertsSection";
+import {
+  ComposedChart,
+  Line,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 interface DashboardData {
   aggregated: {
@@ -45,6 +56,14 @@ interface DashboardData {
       deviation: number;
     }>;
   };
+  dailyEvents: Array<{
+    date: string;
+    users: number;
+    forms: number;
+    phoneCalls: number;
+    formCTR: number;
+    phoneCallCTR: number;
+  }>;
 }
 
 interface ComparisonData {
@@ -198,6 +217,115 @@ export default function Dashboard() {
               metric="users"
               isLoading={isLoading}
             />
+          </div>
+        </div>
+
+        {/* Daily CTR Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Form CTR by Day
+            </h3>
+            {data?.dailyEvents && data.dailyEvents.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={data.dailyEvents}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => {
+                      const d = new Date(value);
+                      return `${d.getMonth() + 1}/${d.getDate()}`;
+                    }}
+                  />
+                  <YAxis
+                    yAxisId="ctr"
+                    orientation="left"
+                    tickFormatter={(value) => `${value.toFixed(1)}%`}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis
+                    yAxisId="count"
+                    orientation="right"
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name: string) => {
+                      if (name === "Form CTR") return [`${value.toFixed(2)}%`, name];
+                      return [value, name];
+                    }}
+                    labelFormatter={(label) => {
+                      const d = new Date(label);
+                      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                    }}
+                  />
+                  <Legend />
+                  <Bar yAxisId="count" dataKey="forms" name="Forms" fill="#c4b5fd" radius={[2, 2, 0, 0]} />
+                  <Line yAxisId="ctr" type="monotone" dataKey="formCTR" name="Form CTR" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center">
+                {isLoading ? (
+                  <div className="animate-pulse text-gray-400">Loading chart...</div>
+                ) : (
+                  <p className="text-gray-500">No form event data available</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Phone Call CTR by Day
+            </h3>
+            {data?.dailyEvents && data.dailyEvents.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={data.dailyEvents}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => {
+                      const d = new Date(value);
+                      return `${d.getMonth() + 1}/${d.getDate()}`;
+                    }}
+                  />
+                  <YAxis
+                    yAxisId="ctr"
+                    orientation="left"
+                    tickFormatter={(value) => `${value.toFixed(1)}%`}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis
+                    yAxisId="count"
+                    orientation="right"
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name: string) => {
+                      if (name === "Phone Call CTR") return [`${value.toFixed(2)}%`, name];
+                      return [value, name];
+                    }}
+                    labelFormatter={(label) => {
+                      const d = new Date(label);
+                      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                    }}
+                  />
+                  <Legend />
+                  <Bar yAxisId="count" dataKey="phoneCalls" name="Phone Calls" fill="#fcd34d" radius={[2, 2, 0, 0]} />
+                  <Line yAxisId="ctr" type="monotone" dataKey="phoneCallCTR" name="Phone Call CTR" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center">
+                {isLoading ? (
+                  <div className="animate-pulse text-gray-400">Loading chart...</div>
+                ) : (
+                  <p className="text-gray-500">No phone call event data available</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

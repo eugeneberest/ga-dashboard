@@ -6,6 +6,7 @@ import {
   getTrafficSources,
   comparePeriods,
   detectAnomalies,
+  getDailyEvents,
   type DateRange,
 } from "@/lib/ga-client";
 
@@ -56,13 +57,14 @@ export async function GET(request: NextRequest) {
       }
 
       case "dashboard": {
-        const [aggregated, metrics, topPages, trafficSources, anomalies] =
+        const [aggregated, metrics, topPages, trafficSources, anomalies, dailyEvents] =
           await Promise.all([
             getAggregatedMetrics(dateRange),
             getMetrics(dateRange),
             getTopPages(dateRange, 5),
             getTrafficSources(dateRange),
             detectAnomalies("users"),
+            getDailyEvents(dateRange),
           ]);
 
         return NextResponse.json({
@@ -73,6 +75,7 @@ export async function GET(request: NextRequest) {
             topPages,
             trafficSources,
             anomalies,
+            dailyEvents,
           },
         });
       }

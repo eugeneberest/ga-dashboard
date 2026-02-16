@@ -1154,6 +1154,94 @@ export async function detectAnomalies(
   };
 }
 
+export interface DailyEventData {
+  date: string;
+  users: number;
+  forms: number;
+  phoneCalls: number;
+  formCTR: number;
+  phoneCallCTR: number;
+}
+
+export async function getDailyEvents(dateRange: DateRange): Promise<DailyEventData[]> {
+  // Query form events by date
+  const [formResponse] = await analyticsDataClient.runReport({
+    property: propertyId,
+    dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
+    dimensions: [{ name: "date" }],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: {
+        fieldName: "eventName",
+        stringFilter: { matchType: "EXACT", value: "form" },
+      },
+    },
+    orderBys: [{ dimension: { dimensionName: "date" } }],
+  });
+
+  // Query phone_call events by date
+  const [phoneResponse] = await analyticsDataClient.runReport({
+    property: propertyId,
+    dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
+    dimensions: [{ name: "date" }],
+    metrics: [{ name: "eventCount" }],
+    dimensionFilter: {
+      filter: {
+        fieldName: "eventName",
+        stringFilter: { matchType: "EXACT", value: "phone_call" },
+      },
+    },
+    orderBys: [{ dimension: { dimensionName: "date" } }],
+  });
+
+  // Query daily users
+  const [usersResponse] = await analyticsDataClient.runReport({
+    property: propertyId,
+    dateRanges: [{ startDate: dateRange.startDate, endDate: dateRange.endDate }],
+    dimensions: [{ name: "date" }],
+    metrics: [{ name: "activeUsers" }],
+    orderBys: [{ dimension: { dimensionName: "date" } }],
+  });
+
+  // Build maps
+  const formsByDate = new Map<string, number>();
+  if (formResponse.rows) {
+    for (const row of formResponse.rows) {
+      const date = formatDate(row.dimensionValues?.[0]?.value || "");
+      formsByDate.set(date, parseInt(row.metricValues?.[0]?.value || "0"));
+    }
+  }
+
+  const phonesByDate = new Map<string, number>();
+  if (phoneResponse.rows) {
+    for (const row of phoneResponse.rows) {
+      const date = formatDate(row.dimensionValues?.[0]?.value || "");
+      phonesByDate.set(date, parseInt(row.metricValues?.[0]?.value || "0"));
+    }
+  }
+
+  const results: DailyEventData[] = [];
+  if (usersResponse.rows) {
+    for (const row of usersResponse.rows) {
+      const date = formatDate(row.dimensionValues?.[0]?.value || "");
+      const users = parseInt(row.metricValues?.[0]?.value || "0");
+      const forms = formsByDate.get(date) || 0;
+      const phoneCalls = phonesByDate.get(date) || 0;
+
+      results.push({
+        date,
+        users,
+        forms,
+        phoneCalls,
+        formCTR: users > 0 ? (forms / users) * 100 : 0,
+        phoneCallCTR: users > 0 ? (phoneCalls / users) * 100 : 0,
+      });
+    }
+  }
+
+  return results;
+}
+
 function formatDate(dateStr: string): string {
   if (dateStr.length === 8) {
     return `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`;
