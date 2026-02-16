@@ -7,10 +7,22 @@ import {
   compareWithLastYear,
   getConversionsByChannel,
   getDetailedChannelBreakdown,
+  getDailyEvents,
   getLastCompleteWeek,
   getSameWeekLastYear,
   type DateRange,
 } from "@/lib/ga-client";
+
+function getPreviousWeek(dateRange: DateRange): DateRange {
+  const start = new Date(dateRange.startDate);
+  const end = new Date(dateRange.endDate);
+  start.setDate(start.getDate() - 7);
+  end.setDate(end.getDate() - 7);
+  return {
+    startDate: start.toISOString().split("T")[0],
+    endDate: end.toISOString().split("T")[0],
+  };
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -28,9 +40,14 @@ export async function GET(request: NextRequest) {
   }
 
   const lastYearPeriod = getSameWeekLastYear(currentPeriod);
+  const previousWeekPeriod = getPreviousWeek(currentPeriod);
 
   try {
-    const [weeklyData, leads, topPages, trafficSources, comparison, conversionsByChannel, detailedBreakdownResult] = await Promise.all([
+    const [
+      weeklyData, leads, topPages, trafficSources, comparison,
+      conversionsByChannel, detailedBreakdownResult, dailyEvents,
+      prevWeekMetrics, prevWeekBreakdownResult, prevWeekConversions,
+    ] = await Promise.all([
       getWeeklyDashboardMetrics(currentPeriod),
       getLeadsAndConversions(currentPeriod),
       getTopPages(currentPeriod, 10),
@@ -38,6 +55,10 @@ export async function GET(request: NextRequest) {
       compareWithLastYear(currentPeriod),
       getConversionsByChannel(currentPeriod),
       getDetailedChannelBreakdown(currentPeriod),
+      getDailyEvents(currentPeriod),
+      getWeeklyDashboardMetrics(previousWeekPeriod),
+      getDetailedChannelBreakdown(previousWeekPeriod),
+      getConversionsByChannel(previousWeekPeriod),
     ]);
 
     const { breakdown: detailedBreakdown, rawPhoneCallsBySource } = detailedBreakdownResult;
@@ -59,12 +80,58 @@ export async function GET(request: NextRequest) {
       ? (breakdownTotals.conversions / breakdownTotals.sessions) * 100
       : 0;
 
+    // Build previous week comparison
+    const prevBreakdownSources = Object.values(prevWeekBreakdownResult.breakdown).flat();
+    const prevBreakdownTotals = prevBreakdownSources.reduce(
+      (acc, s) => ({
+        sessions: acc.sessions + s.sessions,
+        users: acc.users + s.users,
+        conversions: acc.conversions + s.conversions,
+        formSubmissions: acc.formSubmissions + s.formSubmissions,
+        phoneCalls: acc.phoneCalls + s.phoneCalls,
+      }),
+      { sessions: 0, users: 0, conversions: 0, formSubmissions: 0, phoneCalls: 0 }
+    );
+    const prevClickToLeadRate = prevBreakdownTotals.sessions > 0
+      ? (prevBreakdownTotals.conversions / prevBreakdownTotals.sessions) * 100
+      : 0;
+
+    const calculateChange = (curr: number, prev: number): number => {
+      if (prev === 0) return curr > 0 ? 100 : 0;
+      return ((curr - prev) / prev) * 100;
+    };
+
+    const previousWeekComparison = {
+      previousWeek: {
+        ...prevWeekMetrics.totals,
+        users: prevBreakdownTotals.users,
+        conversions: prevBreakdownTotals.conversions,
+        formSubmissions: prevBreakdownTotals.formSubmissions,
+        phoneCalls: prevBreakdownTotals.phoneCalls,
+        clickToLeadRate: prevClickToLeadRate,
+      },
+      changes: {
+        users: calculateChange(breakdownTotals.users, prevBreakdownTotals.users),
+        newUsers: calculateChange(weeklyData.totals.newUsers, prevWeekMetrics.totals.newUsers),
+        sessions: calculateChange(breakdownTotals.sessions, prevBreakdownTotals.sessions),
+        pageviews: calculateChange(weeklyData.totals.pageviews, prevWeekMetrics.totals.pageviews),
+        conversions: calculateChange(breakdownTotals.conversions, prevBreakdownTotals.conversions),
+        impressions: calculateChange(weeklyData.totals.impressions, prevWeekMetrics.totals.impressions),
+        clicks: calculateChange(weeklyData.totals.clicks, prevWeekMetrics.totals.clicks),
+        ctr: calculateChange(weeklyData.totals.ctr, prevWeekMetrics.totals.ctr),
+        formSubmissions: calculateChange(breakdownTotals.formSubmissions, prevBreakdownTotals.formSubmissions),
+        phoneCalls: calculateChange(breakdownTotals.phoneCalls, prevBreakdownTotals.phoneCalls),
+        clickToLeadRate: calculateChange(clickToLeadRate, prevClickToLeadRate),
+      },
+    };
+
     return NextResponse.json({
       success: true,
       data: {
         period: {
           current: currentPeriod,
           lastYear: lastYearPeriod,
+          previousWeek: previousWeekPeriod,
         },
         totals: {
           ...weeklyData.totals,
@@ -75,6 +142,7 @@ export async function GET(request: NextRequest) {
           clickToLeadRate,
         },
         daily: weeklyData.daily,
+        dailyEvents,
         leads,
         topPages,
         trafficSources,
@@ -86,6 +154,7 @@ export async function GET(request: NextRequest) {
           lastYear: comparison.lastYear,
           changes: comparison.changes,
         },
+        previousWeekComparison,
       },
     });
   } catch (error) {

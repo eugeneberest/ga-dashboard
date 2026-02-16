@@ -7,6 +7,8 @@ import {
   Area,
   BarChart,
   Bar,
+  ComposedChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -75,10 +77,20 @@ interface RawPhoneCall {
   count: number;
 }
 
+interface DailyEvent {
+  date: string;
+  users: number;
+  forms: number;
+  phoneCalls: number;
+  formCTR: number;
+  phoneCallCTR: number;
+}
+
 interface WeeklyData {
   period: {
     current: { startDate: string; endDate: string };
     lastYear: { startDate: string; endDate: string };
+    previousWeek: { startDate: string; endDate: string };
   };
   totals: WeeklyTotals;
   daily: Array<{
@@ -87,6 +99,7 @@ interface WeeklyData {
     sessions: number;
     conversions: number;
   }>;
+  dailyEvents: DailyEvent[];
   leads: {
     total: number;
     bySource: Array<{ source: string; leads: number }>;
@@ -108,6 +121,10 @@ interface WeeklyData {
   comparison: {
     current: WeeklyTotals;
     lastYear: WeeklyTotals;
+    changes: Record<string, number>;
+  };
+  previousWeekComparison: {
+    previousWeek: WeeklyTotals;
     changes: Record<string, number>;
   };
 }
@@ -175,6 +192,8 @@ function MetricCard({
   format = "number",
   icon,
   highlight = false,
+  changeLabel = "vs last year",
+  comparisonLabel = "Last year",
 }: {
   title: string;
   value: number;
@@ -183,6 +202,8 @@ function MetricCard({
   format?: "number" | "percent" | "duration";
   icon?: string;
   highlight?: boolean;
+  changeLabel?: string;
+  comparisonLabel?: string;
 }) {
   const formatValue = (val: number): string => {
     switch (format) {
@@ -213,12 +234,12 @@ function MetricCard({
           change >= 0 ? "text-green-600" : "text-red-600"
         }`}>
           <span>{change >= 0 ? "↑" : "↓"}</span>
-          <span>{Math.abs(change).toFixed(1)}% vs last year</span>
+          <span>{Math.abs(change).toFixed(1)}% {changeLabel}</span>
         </div>
       )}
       {lastYearValue !== undefined && (
         <div className="text-xs text-gray-400 mt-1">
-          Last year: {formatValue(lastYearValue)}
+          {comparisonLabel}: {formatValue(lastYearValue)}
         </div>
       )}
     </div>
@@ -505,6 +526,7 @@ export default function WeeklyDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [periodType, setPeriodType] = useState<"lastWeek" | "last7days">("lastWeek");
+  const [comparisonMode, setComparisonMode] = useState<"yoy" | "wow">("yoy");
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -585,6 +607,13 @@ export default function WeeklyDashboard() {
 
   const breakdown = data.detailedBreakdown;
 
+  // Derive comparison values based on mode
+  const isWoW = comparisonMode === "wow";
+  const activeChanges = isWoW ? data.previousWeekComparison.changes : data.comparison.changes;
+  const activeComparisonValues = isWoW ? data.previousWeekComparison.previousWeek : data.comparison.lastYear;
+  const changeLabel = isWoW ? "vs prev week" : "vs last year";
+  const comparisonLabel = isWoW ? "Prev week" : "Last year";
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
@@ -595,11 +624,36 @@ export default function WeeklyDashboard() {
               <p className="text-gray-500 text-sm mt-1">
                 {formatFullDate(data.period.current.startDate)} - {formatFullDate(data.period.current.endDate)}
                 <span className="text-gray-400 ml-2">
-                  (vs {formatFullDate(data.period.lastYear.startDate)} - {formatFullDate(data.period.lastYear.endDate)})
+                  {isWoW
+                    ? `(vs ${formatFullDate(data.period.previousWeek.startDate)} - ${formatFullDate(data.period.previousWeek.endDate)})`
+                    : `(vs ${formatFullDate(data.period.lastYear.startDate)} - ${formatFullDate(data.period.lastYear.endDate)})`
+                  }
                 </span>
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                <button
+                  onClick={() => setComparisonMode("yoy")}
+                  className={`px-3 py-2 text-sm transition-colors ${
+                    comparisonMode === "yoy"
+                      ? "bg-purple-600 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  YoY
+                </button>
+                <button
+                  onClick={() => setComparisonMode("wow")}
+                  className={`px-3 py-2 text-sm transition-colors border-l border-gray-200 ${
+                    comparisonMode === "wow"
+                      ? "bg-purple-600 text-white"
+                      : "bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  WoW
+                </button>
+              </div>
               <button
                 onClick={() => setPeriodType("lastWeek")}
                 className={`px-4 py-2 text-sm rounded-lg transition-colors ${
@@ -639,43 +693,53 @@ export default function WeeklyDashboard() {
             <MetricCard
               title="Form Submissions"
               value={data.totals.formSubmissions}
-              change={data.comparison.changes.formSubmissions}
-              lastYearValue={data.comparison.lastYear.formSubmissions}
+              change={activeChanges.formSubmissions}
+              lastYearValue={activeComparisonValues.formSubmissions}
               icon="📝"
               highlight={true}
+              changeLabel={changeLabel}
+              comparisonLabel={comparisonLabel}
             />
             <MetricCard
               title="Phone Calls"
               value={data.totals.phoneCalls}
-              change={data.comparison.changes.phoneCalls}
-              lastYearValue={data.comparison.lastYear.phoneCalls}
+              change={activeChanges.phoneCalls}
+              lastYearValue={activeComparisonValues.phoneCalls}
               icon="📞"
               highlight={true}
+              changeLabel={changeLabel}
+              comparisonLabel={comparisonLabel}
             />
             <MetricCard
               title="Total Leads"
               value={data.totals.conversions}
-              change={data.comparison.changes.conversions}
-              lastYearValue={data.comparison.lastYear.conversions}
+              change={activeChanges.conversions}
+              lastYearValue={activeComparisonValues.conversions}
               icon="🎯"
               highlight={true}
+              changeLabel={changeLabel}
+              comparisonLabel={comparisonLabel}
             />
             <MetricCard
               title="Click → Lead Rate"
               value={data.totals.clickToLeadRate}
-              change={data.comparison.changes.clickToLeadRate}
-              lastYearValue={data.comparison.lastYear.clickToLeadRate}
+              change={activeChanges.clickToLeadRate}
+              lastYearValue={activeComparisonValues.clickToLeadRate}
               format="percent"
               icon="📈"
               highlight={true}
+              changeLabel={changeLabel}
+              comparisonLabel={comparisonLabel}
             />
             <MetricCard
               title="Users"
               value={data.totals.users}
-              change={data.comparison.changes.users}
-              lastYearValue={data.comparison.lastYear.users}
+              change={activeChanges.users}
+              lastYearValue={activeComparisonValues.users}
               icon="👥"
               highlight={true}
+              changeLabel={changeLabel}
+              comparisonLabel={comparisonLabel}
             />
           </div>
         </section>
@@ -684,6 +748,93 @@ export default function WeeklyDashboard() {
         <section>
           <CategorySummaryTable breakdown={breakdown} />
         </section>
+
+        {/* Daily CTR Charts */}
+        {data.dailyEvents && data.dailyEvents.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Form CTR by Day</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={data.dailyEvents}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => {
+                      const d = new Date(value);
+                      return `${d.getMonth() + 1}/${d.getDate()}`;
+                    }}
+                  />
+                  <YAxis
+                    yAxisId="ctr"
+                    orientation="left"
+                    tickFormatter={(value) => `${value.toFixed(1)}%`}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis
+                    yAxisId="count"
+                    orientation="right"
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name: string) => {
+                      if (name === "Form CTR") return [`${value.toFixed(2)}%`, name];
+                      return [value, name];
+                    }}
+                    labelFormatter={(label) => {
+                      const d = new Date(label);
+                      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                    }}
+                  />
+                  <Legend />
+                  <Bar yAxisId="count" dataKey="forms" name="Forms" fill="#c4b5fd" radius={[2, 2, 0, 0]} />
+                  <Line yAxisId="ctr" type="monotone" dataKey="formCTR" name="Form CTR" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Phone Call CTR by Day</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <ComposedChart data={data.dailyEvents}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(value) => {
+                      const d = new Date(value);
+                      return `${d.getMonth() + 1}/${d.getDate()}`;
+                    }}
+                  />
+                  <YAxis
+                    yAxisId="ctr"
+                    orientation="left"
+                    tickFormatter={(value) => `${value.toFixed(1)}%`}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis
+                    yAxisId="count"
+                    orientation="right"
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name: string) => {
+                      if (name === "Phone Call CTR") return [`${value.toFixed(2)}%`, name];
+                      return [value, name];
+                    }}
+                    labelFormatter={(label) => {
+                      const d = new Date(label);
+                      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                    }}
+                  />
+                  <Legend />
+                  <Bar yAxisId="count" dataKey="phoneCalls" name="Phone Calls" fill="#fcd34d" radius={[2, 2, 0, 0]} />
+                  <Line yAxisId="ctr" type="monotone" dataKey="phoneCallCTR" name="Phone Call CTR" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {/* Detailed Channel Breakdowns */}
         <section>
@@ -853,22 +1004,30 @@ export default function WeeklyDashboard() {
 
         {/* Summary Banner */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
-          <h3 className="text-lg font-semibold mb-4">Weekly Summary vs Last Year</h3>
+          <h3 className="text-lg font-semibold mb-4">
+            Weekly Summary {isWoW ? "vs Previous Week" : "vs Last Year"}
+          </h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
             <div>
               <p className="text-blue-100 text-sm">Total Leads</p>
               <p className="text-3xl font-bold">{data.totals.conversions.toLocaleString()}</p>
-              <p className={`text-sm ${data.comparison.changes.conversions >= 0 ? "text-green-300" : "text-red-300"}`}>
-                {data.comparison.changes.conversions >= 0 ? "↑" : "↓"} {Math.abs(data.comparison.changes.conversions).toFixed(1)}%
+              <p className={`text-sm ${activeChanges.conversions >= 0 ? "text-green-300" : "text-red-300"}`}>
+                {activeChanges.conversions >= 0 ? "↑" : "↓"} {Math.abs(activeChanges.conversions).toFixed(1)}%
               </p>
             </div>
             <div>
               <p className="text-blue-100 text-sm">Form Submissions</p>
               <p className="text-3xl font-bold">{data.totals.formSubmissions.toLocaleString()}</p>
+              <p className={`text-sm ${activeChanges.formSubmissions >= 0 ? "text-green-300" : "text-red-300"}`}>
+                {activeChanges.formSubmissions >= 0 ? "↑" : "↓"} {Math.abs(activeChanges.formSubmissions).toFixed(1)}%
+              </p>
             </div>
             <div>
               <p className="text-blue-100 text-sm">Phone Calls</p>
               <p className="text-3xl font-bold">{data.totals.phoneCalls.toLocaleString()}</p>
+              <p className={`text-sm ${activeChanges.phoneCalls >= 0 ? "text-green-300" : "text-red-300"}`}>
+                {activeChanges.phoneCalls >= 0 ? "↑" : "↓"} {Math.abs(activeChanges.phoneCalls).toFixed(1)}%
+              </p>
             </div>
             <div>
               <p className="text-blue-100 text-sm">Click → Lead</p>
@@ -877,8 +1036,8 @@ export default function WeeklyDashboard() {
             <div>
               <p className="text-blue-100 text-sm">Total Users</p>
               <p className="text-3xl font-bold">{data.totals.users.toLocaleString()}</p>
-              <p className={`text-sm ${data.comparison.changes.users >= 0 ? "text-green-300" : "text-red-300"}`}>
-                {data.comparison.changes.users >= 0 ? "↑" : "↓"} {Math.abs(data.comparison.changes.users).toFixed(1)}%
+              <p className={`text-sm ${activeChanges.users >= 0 ? "text-green-300" : "text-red-300"}`}>
+                {activeChanges.users >= 0 ? "↑" : "↓"} {Math.abs(activeChanges.users).toFixed(1)}%
               </p>
             </div>
           </div>
@@ -927,7 +1086,10 @@ export default function WeeklyDashboard() {
       <footer className="bg-white border-t border-gray-200 mt-8">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <p className="text-center text-gray-500 text-sm">
-            Data compared with same week last year ({formatFullDate(data.period.lastYear.startDate)} - {formatFullDate(data.period.lastYear.endDate)})
+            {isWoW
+              ? `Data compared with previous week (${formatFullDate(data.period.previousWeek.startDate)} - ${formatFullDate(data.period.previousWeek.endDate)})`
+              : `Data compared with same week last year (${formatFullDate(data.period.lastYear.startDate)} - ${formatFullDate(data.period.lastYear.endDate)})`
+            }
           </p>
         </div>
       </footer>
