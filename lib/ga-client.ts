@@ -1053,8 +1053,10 @@ export async function compareWithLastYear(
     return ((curr - prev) / prev) * 100;
   };
 
-  const currentTotalLeads = currentConversions.totalConversions;
-  const lastYearTotalLeads = lastYearConversions.totalConversions;
+  // Use form + phone_call events as total leads (not GA4 conversions metric
+  // which may include other key events that no longer exist)
+  const currentTotalLeads = currentConversions.formSubmissions + currentConversions.phoneCalls;
+  const lastYearTotalLeads = lastYearConversions.formSubmissions + lastYearConversions.phoneCalls;
 
   const currentClickToLead = currentData.totals.sessions > 0
     ? (currentTotalLeads / currentData.totals.sessions) * 100

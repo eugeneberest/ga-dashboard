@@ -76,8 +76,10 @@ export async function GET(request: NextRequest) {
       { sessions: 0, users: 0, conversions: 0, formSubmissions: 0, phoneCalls: 0 }
     );
 
+    // Use form + phone_call as total leads (not GA4 conversions metric)
+    const totalLeads = breakdownTotals.formSubmissions + breakdownTotals.phoneCalls;
     const clickToLeadRate = breakdownTotals.sessions > 0
-      ? (breakdownTotals.conversions / breakdownTotals.sessions) * 100
+      ? (totalLeads / breakdownTotals.sessions) * 100
       : 0;
 
     // Build previous week comparison
@@ -86,14 +88,15 @@ export async function GET(request: NextRequest) {
       (acc, s) => ({
         sessions: acc.sessions + s.sessions,
         users: acc.users + s.users,
-        conversions: acc.conversions + s.conversions,
         formSubmissions: acc.formSubmissions + s.formSubmissions,
         phoneCalls: acc.phoneCalls + s.phoneCalls,
       }),
-      { sessions: 0, users: 0, conversions: 0, formSubmissions: 0, phoneCalls: 0 }
+      { sessions: 0, users: 0, formSubmissions: 0, phoneCalls: 0 }
     );
+
+    const prevTotalLeads = prevBreakdownTotals.formSubmissions + prevBreakdownTotals.phoneCalls;
     const prevClickToLeadRate = prevBreakdownTotals.sessions > 0
-      ? (prevBreakdownTotals.conversions / prevBreakdownTotals.sessions) * 100
+      ? (prevTotalLeads / prevBreakdownTotals.sessions) * 100
       : 0;
 
     const calculateChange = (curr: number, prev: number): number => {
@@ -105,7 +108,7 @@ export async function GET(request: NextRequest) {
       previousWeek: {
         ...prevWeekMetrics.totals,
         users: prevBreakdownTotals.users,
-        conversions: prevBreakdownTotals.conversions,
+        conversions: prevTotalLeads,
         formSubmissions: prevBreakdownTotals.formSubmissions,
         phoneCalls: prevBreakdownTotals.phoneCalls,
         clickToLeadRate: prevClickToLeadRate,
@@ -115,7 +118,7 @@ export async function GET(request: NextRequest) {
         newUsers: calculateChange(weeklyData.totals.newUsers, prevWeekMetrics.totals.newUsers),
         sessions: calculateChange(breakdownTotals.sessions, prevBreakdownTotals.sessions),
         pageviews: calculateChange(weeklyData.totals.pageviews, prevWeekMetrics.totals.pageviews),
-        conversions: calculateChange(breakdownTotals.conversions, prevBreakdownTotals.conversions),
+        conversions: calculateChange(totalLeads, prevTotalLeads),
         impressions: calculateChange(weeklyData.totals.impressions, prevWeekMetrics.totals.impressions),
         clicks: calculateChange(weeklyData.totals.clicks, prevWeekMetrics.totals.clicks),
         ctr: calculateChange(weeklyData.totals.ctr, prevWeekMetrics.totals.ctr),
@@ -136,7 +139,7 @@ export async function GET(request: NextRequest) {
         totals: {
           ...weeklyData.totals,
           users: breakdownTotals.users,
-          conversions: breakdownTotals.conversions,
+          conversions: totalLeads,
           formSubmissions: breakdownTotals.formSubmissions,
           phoneCalls: breakdownTotals.phoneCalls,
           clickToLeadRate,
