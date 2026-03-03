@@ -54,7 +54,7 @@ interface DetailedBreakdown {
   other: SourceMetrics[];
 }
 
-interface WeeklyTotals {
+interface MonthlyTotals {
   users: number;
   newUsers: number;
   sessions: number;
@@ -86,13 +86,13 @@ interface DailyEvent {
   phoneCallCTR: number;
 }
 
-interface WeeklyData {
+interface MonthlyData {
   period: {
     current: { startDate: string; endDate: string };
     lastYear: { startDate: string; endDate: string };
-    previousWeek: { startDate: string; endDate: string };
+    previousMonth: { startDate: string; endDate: string };
   };
-  totals: WeeklyTotals;
+  totals: MonthlyTotals;
   daily: Array<{
     date: string;
     users: number;
@@ -118,31 +118,45 @@ interface WeeklyData {
   conversionsByChannel: ChannelMetrics[];
   detailedBreakdown: DetailedBreakdown;
   rawPhoneCallsBySource: RawPhoneCall[];
-  comparison: {
-    current: WeeklyTotals;
-    lastYear: WeeklyTotals;
+  lastYearComparison: {
+    lastYear: MonthlyTotals;
     changes: Record<string, number>;
   };
-  previousWeekComparison: {
-    previousWeek: WeeklyTotals;
+  previousMonthComparison: {
+    previousMonth: MonthlyTotals;
     changes: Record<string, number>;
   };
 }
 
 type SortDirection = "asc" | "desc";
-type SortField = "source" | "sessions" | "formSubmissions" | "phoneCalls" | "conversions" | "clickToLeadRate";
+type SortField =
+  | "source"
+  | "sessions"
+  | "formSubmissions"
+  | "phoneCalls"
+  | "conversions"
+  | "clickToLeadRate";
 
-const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"];
+const COLORS = [
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#ec4899",
+  "#06b6d4",
+  "#84cc16",
+];
 
 const CHANNEL_COLORS: Record<string, string> = {
   "Organic Search": "#10b981",
   "Paid Search": "#3b82f6",
-  "Direct": "#8b5cf6",
-  "Referral": "#f59e0b",
+  Direct: "#8b5cf6",
+  Referral: "#f59e0b",
   "Organic Social": "#ec4899",
   "Paid Social": "#06b6d4",
-  "Email": "#ef4444",
-  "Display": "#84cc16",
+  Email: "#ef4444",
+  Display: "#84cc16",
 };
 
 const CATEGORY_INFO: Record<string, { name: string; color: string; icon: string }> = {
@@ -209,19 +223,24 @@ function MetricCard({
     switch (format) {
       case "percent":
         return `${val.toFixed(2)}%`;
-      case "duration":
+      case "duration": {
         const mins = Math.floor(val / 60);
         const secs = Math.round(val % 60);
         return `${mins}:${secs.toString().padStart(2, "0")}`;
+      }
       default:
         return val.toLocaleString();
     }
   };
 
   return (
-    <div className={`rounded-xl shadow-sm border p-5 hover:shadow-md transition-shadow ${
-      highlight ? "bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200" : "bg-white border-gray-100"
-    }`}>
+    <div
+      className={`rounded-xl shadow-sm border p-5 hover:shadow-md transition-shadow ${
+        highlight
+          ? "bg-gradient-to-br from-blue-50 to-purple-50 border-blue-200"
+          : "bg-white border-gray-100"
+      }`}
+    >
       <div className="flex items-center justify-between mb-2">
         <span className="text-gray-500 text-sm font-medium">{title}</span>
         {icon && <span className="text-xl">{icon}</span>}
@@ -230,11 +249,15 @@ function MetricCard({
         {formatValue(value)}
       </div>
       {change !== undefined && (
-        <div className={`text-sm mt-1 flex items-center gap-1 ${
-          change >= 0 ? "text-green-600" : "text-red-600"
-        }`}>
+        <div
+          className={`text-sm mt-1 flex items-center gap-1 ${
+            change >= 0 ? "text-green-600" : "text-red-600"
+          }`}
+        >
           <span>{change >= 0 ? "↑" : "↓"}</span>
-          <span>{Math.abs(change).toFixed(1)}% {changeLabel}</span>
+          <span>
+            {Math.abs(change).toFixed(1)}% {changeLabel}
+          </span>
         </div>
       )}
       {lastYearValue !== undefined && (
@@ -284,27 +307,30 @@ function CategorySummaryTable({ breakdown }: { breakdown: DetailedBreakdown }) {
   });
 
   const summaryData = useMemo(() => {
-    const categories = (Object.entries(breakdown) as [string, SourceMetrics[]][]).map(([key, sources]) => {
-      const info = CATEGORY_INFO[key];
-      const totals = sources.reduce(
-        (acc, s) => ({
-          sessions: acc.sessions + s.sessions,
-          conversions: acc.conversions + s.conversions,
-          formSubmissions: acc.formSubmissions + s.formSubmissions,
-          phoneCalls: acc.phoneCalls + s.phoneCalls,
-        }),
-        { sessions: 0, conversions: 0, formSubmissions: 0, phoneCalls: 0 }
-      );
-      return {
-        key,
-        name: info.name,
-        icon: info.icon,
-        color: info.color,
-        ...totals,
-        clickToLeadRate: totals.sessions > 0 ? (totals.conversions / totals.sessions) * 100 : 0,
-        sourceCount: sources.length,
-      };
-    });
+    const categories = (Object.entries(breakdown) as [string, SourceMetrics[]][]).map(
+      ([key, sources]) => {
+        const info = CATEGORY_INFO[key];
+        const totals = sources.reduce(
+          (acc, s) => ({
+            sessions: acc.sessions + s.sessions,
+            conversions: acc.conversions + s.conversions,
+            formSubmissions: acc.formSubmissions + s.formSubmissions,
+            phoneCalls: acc.phoneCalls + s.phoneCalls,
+          }),
+          { sessions: 0, conversions: 0, formSubmissions: 0, phoneCalls: 0 }
+        );
+        return {
+          key,
+          name: info.name,
+          icon: info.icon,
+          color: info.color,
+          ...totals,
+          clickToLeadRate:
+            totals.sessions > 0 ? (totals.conversions / totals.sessions) * 100 : 0,
+          sourceCount: sources.length,
+        };
+      }
+    );
 
     return categories.sort((a, b) => {
       const aVal = a[sort.field as keyof typeof a] as number;
@@ -341,45 +367,99 @@ function CategorySummaryTable({ breakdown }: { breakdown: DetailedBreakdown }) {
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
               <th className="text-left py-3 px-4 font-medium text-gray-500">Category</th>
-              <SortableHeader label="Sessions" field="sessions" currentSort={sort} onSort={handleSort} />
-              <SortableHeader label="Forms" field="formSubmissions" currentSort={sort} onSort={handleSort} />
-              <SortableHeader label="Calls" field="phoneCalls" currentSort={sort} onSort={handleSort} />
-              <SortableHeader label="Total Leads" field="conversions" currentSort={sort} onSort={handleSort} />
-              <SortableHeader label="Conv. Rate" field="clickToLeadRate" currentSort={sort} onSort={handleSort} />
+              <SortableHeader
+                label="Sessions"
+                field="sessions"
+                currentSort={sort}
+                onSort={handleSort}
+              />
+              <SortableHeader
+                label="Forms"
+                field="formSubmissions"
+                currentSort={sort}
+                onSort={handleSort}
+              />
+              <SortableHeader
+                label="Calls"
+                field="phoneCalls"
+                currentSort={sort}
+                onSort={handleSort}
+              />
+              <SortableHeader
+                label="Total Leads"
+                field="conversions"
+                currentSort={sort}
+                onSort={handleSort}
+              />
+              <SortableHeader
+                label="Conv. Rate"
+                field="clickToLeadRate"
+                currentSort={sort}
+                onSort={handleSort}
+              />
               <th className="text-right py-3 px-4 font-medium text-gray-500">Sources</th>
             </tr>
           </thead>
           <tbody>
-            {summaryData.filter(cat => cat.sessions > 0).map((cat) => (
-              <tr key={cat.key} className="border-b border-gray-50 hover:bg-gray-50">
-                <td className="py-3 px-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{cat.icon}</span>
-                    <span className="font-medium text-gray-900">{cat.name}</span>
-                  </div>
-                </td>
-                <td className="py-3 px-2 text-right text-gray-700">{cat.sessions.toLocaleString()}</td>
-                <td className="py-3 px-2 text-right text-gray-700">{cat.formSubmissions.toLocaleString()}</td>
-                <td className="py-3 px-2 text-right text-gray-700">{cat.phoneCalls.toLocaleString()}</td>
-                <td className="py-3 px-2 text-right font-semibold text-gray-900">{cat.conversions.toLocaleString()}</td>
-                <td className="py-3 px-2 text-right">
-                  <span className={`font-semibold ${cat.clickToLeadRate > 5 ? "text-green-600" : cat.clickToLeadRate > 2 ? "text-blue-600" : "text-gray-600"}`}>
-                    {cat.clickToLeadRate.toFixed(2)}%
-                  </span>
-                </td>
-                <td className="py-3 px-4 text-right text-gray-500">{cat.sourceCount}</td>
-              </tr>
-            ))}
+            {summaryData
+              .filter((cat) => cat.sessions > 0)
+              .map((cat) => (
+                <tr key={cat.key} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{cat.icon}</span>
+                      <span className="font-medium text-gray-900">{cat.name}</span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-2 text-right text-gray-700">
+                    {cat.sessions.toLocaleString()}
+                  </td>
+                  <td className="py-3 px-2 text-right text-gray-700">
+                    {cat.formSubmissions.toLocaleString()}
+                  </td>
+                  <td className="py-3 px-2 text-right text-gray-700">
+                    {cat.phoneCalls.toLocaleString()}
+                  </td>
+                  <td className="py-3 px-2 text-right font-semibold text-gray-900">
+                    {cat.conversions.toLocaleString()}
+                  </td>
+                  <td className="py-3 px-2 text-right">
+                    <span
+                      className={`font-semibold ${
+                        cat.clickToLeadRate > 5
+                          ? "text-green-600"
+                          : cat.clickToLeadRate > 2
+                          ? "text-blue-600"
+                          : "text-gray-600"
+                      }`}
+                    >
+                      {cat.clickToLeadRate.toFixed(2)}%
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-right text-gray-500">{cat.sourceCount}</td>
+                </tr>
+              ))}
           </tbody>
           <tfoot>
             <tr className="bg-gray-100 font-semibold">
               <td className="py-3 px-4 text-gray-900">Total</td>
-              <td className="py-3 px-2 text-right text-gray-900">{grandTotal.sessions.toLocaleString()}</td>
-              <td className="py-3 px-2 text-right text-gray-900">{grandTotal.formSubmissions.toLocaleString()}</td>
-              <td className="py-3 px-2 text-right text-gray-900">{grandTotal.phoneCalls.toLocaleString()}</td>
-              <td className="py-3 px-2 text-right text-gray-900">{grandTotal.conversions.toLocaleString()}</td>
               <td className="py-3 px-2 text-right text-gray-900">
-                {grandTotal.sessions > 0 ? ((grandTotal.conversions / grandTotal.sessions) * 100).toFixed(2) : 0}%
+                {grandTotal.sessions.toLocaleString()}
+              </td>
+              <td className="py-3 px-2 text-right text-gray-900">
+                {grandTotal.formSubmissions.toLocaleString()}
+              </td>
+              <td className="py-3 px-2 text-right text-gray-900">
+                {grandTotal.phoneCalls.toLocaleString()}
+              </td>
+              <td className="py-3 px-2 text-right text-gray-900">
+                {grandTotal.conversions.toLocaleString()}
+              </td>
+              <td className="py-3 px-2 text-right text-gray-900">
+                {grandTotal.sessions > 0
+                  ? ((grandTotal.conversions / grandTotal.sessions) * 100).toFixed(2)
+                  : 0}
+                %
               </td>
               <td className="py-3 px-4 text-right text-gray-500">-</td>
             </tr>
@@ -422,7 +502,9 @@ function DetailedSourceTable({
           : (bVal as string).localeCompare(aVal as string);
       }
 
-      return sort.direction === "asc" ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+      return sort.direction === "asc"
+        ? (aVal as number) - (bVal as number)
+        : (bVal as number) - (aVal as number);
     });
   }, [sources, sort]);
 
@@ -459,8 +541,12 @@ function DetailedSourceTable({
           </div>
           <div className="flex items-center gap-4">
             <div className="flex gap-4 text-sm">
-              <span><strong>{totals.sessions.toLocaleString()}</strong> sessions</span>
-              <span><strong>{totals.conversions.toLocaleString()}</strong> leads</span>
+              <span>
+                <strong>{totals.sessions.toLocaleString()}</strong> sessions
+              </span>
+              <span>
+                <strong>{totals.conversions.toLocaleString()}</strong> leads
+              </span>
             </div>
             <span className="text-lg">{isExpanded ? "▼" : "▶"}</span>
           </div>
@@ -471,13 +557,44 @@ function DetailedSourceTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <SortableHeader label="Source" field="source" currentSort={sort} onSort={handleSort} align="left" />
+                <SortableHeader
+                  label="Source"
+                  field="source"
+                  currentSort={sort}
+                  onSort={handleSort}
+                  align="left"
+                />
                 <th className="text-left py-2 px-2 font-medium text-gray-500">Medium</th>
-                <SortableHeader label="Sessions" field="sessions" currentSort={sort} onSort={handleSort} />
-                <SortableHeader label="Forms" field="formSubmissions" currentSort={sort} onSort={handleSort} />
-                <SortableHeader label="Calls" field="phoneCalls" currentSort={sort} onSort={handleSort} />
-                <SortableHeader label="Leads" field="conversions" currentSort={sort} onSort={handleSort} />
-                <SortableHeader label="Conv. Rate" field="clickToLeadRate" currentSort={sort} onSort={handleSort} />
+                <SortableHeader
+                  label="Sessions"
+                  field="sessions"
+                  currentSort={sort}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Forms"
+                  field="formSubmissions"
+                  currentSort={sort}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Calls"
+                  field="phoneCalls"
+                  currentSort={sort}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Leads"
+                  field="conversions"
+                  currentSort={sort}
+                  onSort={handleSort}
+                />
+                <SortableHeader
+                  label="Conv. Rate"
+                  field="clickToLeadRate"
+                  currentSort={sort}
+                  onSort={handleSort}
+                />
               </tr>
             </thead>
             <tbody>
@@ -490,12 +607,28 @@ function DetailedSourceTable({
                     </div>
                   </td>
                   <td className="py-2 px-2 text-gray-500">{source.medium}</td>
-                  <td className="py-2 px-2 text-right text-gray-700">{source.sessions.toLocaleString()}</td>
-                  <td className="py-2 px-2 text-right text-gray-700">{source.formSubmissions.toLocaleString()}</td>
-                  <td className="py-2 px-2 text-right text-gray-700">{source.phoneCalls.toLocaleString()}</td>
-                  <td className="py-2 px-2 text-right font-semibold text-gray-900">{source.conversions.toLocaleString()}</td>
+                  <td className="py-2 px-2 text-right text-gray-700">
+                    {source.sessions.toLocaleString()}
+                  </td>
+                  <td className="py-2 px-2 text-right text-gray-700">
+                    {source.formSubmissions.toLocaleString()}
+                  </td>
+                  <td className="py-2 px-2 text-right text-gray-700">
+                    {source.phoneCalls.toLocaleString()}
+                  </td>
+                  <td className="py-2 px-2 text-right font-semibold text-gray-900">
+                    {source.conversions.toLocaleString()}
+                  </td>
                   <td className="py-2 px-4 text-right">
-                    <span className={`font-semibold ${source.clickToLeadRate > 5 ? "text-green-600" : source.clickToLeadRate > 2 ? "text-blue-600" : "text-gray-600"}`}>
+                    <span
+                      className={`font-semibold ${
+                        source.clickToLeadRate > 5
+                          ? "text-green-600"
+                          : source.clickToLeadRate > 2
+                          ? "text-blue-600"
+                          : "text-gray-600"
+                      }`}
+                    >
                       {source.clickToLeadRate.toFixed(2)}%
                     </span>
                   </td>
@@ -504,13 +637,26 @@ function DetailedSourceTable({
             </tbody>
             <tfoot>
               <tr className="bg-gray-50 font-semibold">
-                <td className="py-2 px-4 text-gray-900" colSpan={2}>Total</td>
-                <td className="py-2 px-2 text-right text-gray-900">{totals.sessions.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-gray-900">{totals.forms.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-gray-900">{totals.phones.toLocaleString()}</td>
-                <td className="py-2 px-2 text-right text-gray-900">{totals.conversions.toLocaleString()}</td>
+                <td className="py-2 px-4 text-gray-900" colSpan={2}>
+                  Total
+                </td>
+                <td className="py-2 px-2 text-right text-gray-900">
+                  {totals.sessions.toLocaleString()}
+                </td>
+                <td className="py-2 px-2 text-right text-gray-900">
+                  {totals.forms.toLocaleString()}
+                </td>
+                <td className="py-2 px-2 text-right text-gray-900">
+                  {totals.phones.toLocaleString()}
+                </td>
+                <td className="py-2 px-2 text-right text-gray-900">
+                  {totals.conversions.toLocaleString()}
+                </td>
                 <td className="py-2 px-4 text-right text-gray-900">
-                  {totals.sessions > 0 ? ((totals.conversions / totals.sessions) * 100).toFixed(2) : 0}%
+                  {totals.sessions > 0
+                    ? ((totals.conversions / totals.sessions) * 100).toFixed(2)
+                    : 0}
+                  %
                 </td>
               </tr>
             </tfoot>
@@ -521,50 +667,47 @@ function DetailedSourceTable({
   );
 }
 
-export default function WeeklyDashboard() {
-  const [data, setData] = useState<WeeklyData | null>(null);
+function formatMonthYear(dateStr: string): string {
+  const date = new Date(dateStr + "T12:00:00");
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function formatShortDate(dateStr: string): string {
+  const date = new Date(dateStr + "T12:00:00");
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatFullDate(dateStr: string): string {
+  const date = new Date(dateStr + "T12:00:00");
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+export default function MonthlyDashboard() {
+  const [data, setData] = useState<MonthlyData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [periodType, setPeriodType] = useState<"lastWeek" | "last7days">("lastWeek");
-  const [comparisonMode, setComparisonMode] = useState<"yoy" | "wow">("yoy");
+  const [comparisonMode, setComparisonMode] = useState<"yoy" | "mom">("yoy");
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-
     try {
-      const url = periodType === "lastWeek"
-        ? "/api/analytics/weekly?period=lastWeek"
-        : "/api/analytics/weekly?period=custom&startDate=7daysAgo&endDate=yesterday";
-
-      const response = await fetch(url);
+      const response = await fetch("/api/analytics/monthly");
       const result = await response.json();
-
       if (!result.success) {
         throw new Error(result.error || "Failed to fetch data");
       }
-
       setData(result.data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setIsLoading(false);
     }
-  }, [periodType]);
+  }, []);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-  };
-
-  const formatFullDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  };
 
   if (error) {
     return (
@@ -600,19 +743,25 @@ export default function WeeklyDashboard() {
     );
   }
 
+  const breakdown = data.detailedBreakdown;
+  const isMoM = comparisonMode === "mom";
+  const activeChanges = isMoM
+    ? data.previousMonthComparison.changes
+    : data.lastYearComparison.changes;
+  const activeComparisonValues = isMoM
+    ? data.previousMonthComparison.previousMonth
+    : data.lastYearComparison.lastYear;
+  const changeLabel = isMoM ? "vs prev month" : "vs last year";
+  const comparisonLabel = isMoM ? "Prev month" : "Last year";
+
+  const comparisonPeriodLabel = isMoM
+    ? formatMonthYear(data.period.previousMonth.startDate)
+    : formatMonthYear(data.period.lastYear.startDate);
+
   const chartData = data.daily.map((d) => ({
     ...d,
-    formattedDate: formatDate(d.date),
+    formattedDate: formatShortDate(d.date),
   }));
-
-  const breakdown = data.detailedBreakdown;
-
-  // Derive comparison values based on mode
-  const isWoW = comparisonMode === "wow";
-  const activeChanges = isWoW ? data.previousWeekComparison.changes : data.comparison.changes;
-  const activeComparisonValues = isWoW ? data.previousWeekComparison.previousWeek : data.comparison.lastYear;
-  const changeLabel = isWoW ? "vs prev week" : "vs last year";
-  const comparisonLabel = isWoW ? "Prev week" : "Last year";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -620,15 +769,10 @@ export default function WeeklyDashboard() {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Weekly Performance Report</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Monthly Performance Report</h1>
               <p className="text-gray-500 text-sm mt-1">
-                {formatFullDate(data.period.current.startDate)} - {formatFullDate(data.period.current.endDate)}
-                <span className="text-gray-400 ml-2">
-                  {isWoW
-                    ? `(vs ${formatFullDate(data.period.previousWeek.startDate)} - ${formatFullDate(data.period.previousWeek.endDate)})`
-                    : `(vs ${formatFullDate(data.period.lastYear.startDate)} - ${formatFullDate(data.period.lastYear.endDate)})`
-                  }
-                </span>
+                {formatMonthYear(data.period.current.startDate)}
+                <span className="text-gray-400 ml-2">(vs {comparisonPeriodLabel})</span>
               </p>
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -644,41 +788,21 @@ export default function WeeklyDashboard() {
                   YoY
                 </button>
                 <button
-                  onClick={() => setComparisonMode("wow")}
+                  onClick={() => setComparisonMode("mom")}
                   className={`px-3 py-2 text-sm transition-colors border-l border-gray-200 ${
-                    comparisonMode === "wow"
+                    comparisonMode === "mom"
                       ? "bg-purple-600 text-white"
                       : "bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  WoW
+                  MoM
                 </button>
               </div>
-              <button
-                onClick={() => setPeriodType("lastWeek")}
-                className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-                  periodType === "lastWeek"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Last Week (Mon-Sun)
-              </button>
-              <button
-                onClick={() => setPeriodType("last7days")}
-                className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-                  periodType === "last7days"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-              >
-                Last 7 Days
-              </button>
               <Link
-                href="/monthly"
+                href="/weekly"
                 className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
               >
-                Monthly Report
+                Weekly Report
               </Link>
               <Link
                 href="/"
@@ -692,7 +816,7 @@ export default function WeeklyDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Primary Metrics - Forms, Calls, Click to Lead */}
+        {/* Primary Metrics */}
         <section>
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Lead Generation</h2>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -750,7 +874,7 @@ export default function WeeklyDashboard() {
           </div>
         </section>
 
-        {/* Category Summary Table - Moved to top for quick overview */}
+        {/* Category Summary Table */}
         <section>
           <CategorySummaryTable breakdown={breakdown} />
         </section>
@@ -765,9 +889,10 @@ export default function WeeklyDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 11 }}
+                    interval={6}
                     tickFormatter={(value) => {
-                      const d = new Date(value);
+                      const d = new Date(value + "T12:00:00");
                       return `${d.getMonth() + 1}/${d.getDate()}`;
                     }}
                   />
@@ -775,40 +900,57 @@ export default function WeeklyDashboard() {
                     yAxisId="ctr"
                     orientation="left"
                     tickFormatter={(value) => `${value.toFixed(1)}%`}
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 11 }}
                   />
-                  <YAxis
-                    yAxisId="count"
-                    orientation="right"
-                    tick={{ fontSize: 12 }}
-                  />
+                  <YAxis yAxisId="count" orientation="right" tick={{ fontSize: 11 }} />
                   <Tooltip
                     formatter={(value: number, name: string) => {
                       if (name === "Form CTR") return [`${value.toFixed(2)}%`, name];
                       return [value, name];
                     }}
                     labelFormatter={(label) => {
-                      const d = new Date(label);
-                      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                      const d = new Date(label + "T12:00:00");
+                      return d.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      });
                     }}
                   />
                   <Legend />
-                  <Bar yAxisId="count" dataKey="forms" name="Forms" fill="#c4b5fd" radius={[2, 2, 0, 0]} />
-                  <Line yAxisId="ctr" type="monotone" dataKey="formCTR" name="Form CTR" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
+                  <Bar
+                    yAxisId="count"
+                    dataKey="forms"
+                    name="Forms"
+                    fill="#c4b5fd"
+                    radius={[2, 2, 0, 0]}
+                  />
+                  <Line
+                    yAxisId="ctr"
+                    type="monotone"
+                    dataKey="formCTR"
+                    name="Form CTR"
+                    stroke="#8b5cf6"
+                    strokeWidth={2}
+                    dot={false}
+                  />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Phone Call CTR by Day</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Phone Call CTR by Day
+              </h3>
               <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={data.dailyEvents}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 11 }}
+                    interval={6}
                     tickFormatter={(value) => {
-                      const d = new Date(value);
+                      const d = new Date(value + "T12:00:00");
                       return `${d.getMonth() + 1}/${d.getDate()}`;
                     }}
                   />
@@ -816,26 +958,40 @@ export default function WeeklyDashboard() {
                     yAxisId="ctr"
                     orientation="left"
                     tickFormatter={(value) => `${value.toFixed(1)}%`}
-                    tick={{ fontSize: 12 }}
+                    tick={{ fontSize: 11 }}
                   />
-                  <YAxis
-                    yAxisId="count"
-                    orientation="right"
-                    tick={{ fontSize: 12 }}
-                  />
+                  <YAxis yAxisId="count" orientation="right" tick={{ fontSize: 11 }} />
                   <Tooltip
                     formatter={(value: number, name: string) => {
                       if (name === "Phone Call CTR") return [`${value.toFixed(2)}%`, name];
                       return [value, name];
                     }}
                     labelFormatter={(label) => {
-                      const d = new Date(label);
-                      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                      const d = new Date(label + "T12:00:00");
+                      return d.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      });
                     }}
                   />
                   <Legend />
-                  <Bar yAxisId="count" dataKey="phoneCalls" name="Phone Calls" fill="#fcd34d" radius={[2, 2, 0, 0]} />
-                  <Line yAxisId="ctr" type="monotone" dataKey="phoneCallCTR" name="Phone Call CTR" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                  <Bar
+                    yAxisId="count"
+                    dataKey="phoneCalls"
+                    name="Phone Calls"
+                    fill="#fcd34d"
+                    radius={[2, 2, 0, 0]}
+                  />
+                  <Line
+                    yAxisId="ctr"
+                    type="monotone"
+                    dataKey="phoneCallCTR"
+                    name="Phone Call CTR"
+                    stroke="#f59e0b"
+                    strokeWidth={2}
+                    dot={false}
+                  />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -844,8 +1000,12 @@ export default function WeeklyDashboard() {
 
         {/* Detailed Channel Breakdowns */}
         <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Detailed Channel Performance</h2>
-          <p className="text-gray-500 text-sm mb-4">Click headers to sort • Click category headers to expand/collapse</p>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Detailed Channel Performance
+          </h2>
+          <p className="text-gray-500 text-sm mb-4">
+            Click headers to sort • Click category headers to expand/collapse
+          </p>
           <div className="space-y-4">
             <DetailedSourceTable
               title="Organic Search"
@@ -905,13 +1065,17 @@ export default function WeeklyDashboard() {
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Leads Trend */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Daily Leads</h3>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={data.leads.byDay.map((d) => ({ ...d, formattedDate: formatDate(d.date) }))}>
+              <BarChart
+                data={data.leads.byDay.map((d) => ({
+                  ...d,
+                  formattedDate: formatShortDate(d.date),
+                }))}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="formattedDate" fontSize={11} tickLine={false} />
+                <XAxis dataKey="formattedDate" fontSize={11} tickLine={false} interval={6} />
                 <YAxis fontSize={11} tickLine={false} />
                 <Tooltip />
                 <Bar dataKey="leads" name="Leads" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
@@ -919,13 +1083,12 @@ export default function WeeklyDashboard() {
             </ResponsiveContainer>
           </div>
 
-          {/* Traffic Trend */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Traffic Trend</h3>
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="formattedDate" fontSize={11} tickLine={false} />
+                <XAxis dataKey="formattedDate" fontSize={11} tickLine={false} interval={6} />
                 <YAxis fontSize={11} tickLine={false} />
                 <Tooltip />
                 <Legend />
@@ -950,7 +1113,7 @@ export default function WeeklyDashboard() {
           </div>
         </div>
 
-        {/* Leads by Channel Pie + Top Pages */}
+        {/* Leads by Channel + Top Pages */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Leads by Channel Type</h3>
@@ -958,7 +1121,7 @@ export default function WeeklyDashboard() {
               <ResponsiveContainer width="50%" height={220}>
                 <PieChart>
                   <Pie
-                    data={data.conversionsByChannel.filter(c => c.conversions > 0)}
+                    data={data.conversionsByChannel.filter((c) => c.conversions > 0)}
                     dataKey="conversions"
                     nameKey="channel"
                     cx="50%"
@@ -968,26 +1131,39 @@ export default function WeeklyDashboard() {
                     label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
                     labelLine={false}
                   >
-                    {data.conversionsByChannel.filter(c => c.conversions > 0).map((entry, i) => (
-                      <Cell key={i} fill={CHANNEL_COLORS[entry.channel] || COLORS[i % COLORS.length]} />
-                    ))}
+                    {data.conversionsByChannel
+                      .filter((c) => c.conversions > 0)
+                      .map((entry, i) => (
+                        <Cell
+                          key={i}
+                          fill={CHANNEL_COLORS[entry.channel] || COLORS[i % COLORS.length]}
+                        />
+                      ))}
                   </Pie>
                   <Tooltip />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex-1 space-y-2">
-                {data.conversionsByChannel.filter(c => c.conversions > 0).slice(0, 6).map((channel, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: CHANNEL_COLORS[channel.channel] || COLORS[i % COLORS.length] }}
-                      />
-                      <span className="text-gray-700 truncate max-w-[120px]">{channel.channel}</span>
+                {data.conversionsByChannel
+                  .filter((c) => c.conversions > 0)
+                  .slice(0, 6)
+                  .map((channel, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{
+                            backgroundColor:
+                              CHANNEL_COLORS[channel.channel] || COLORS[i % COLORS.length],
+                          }}
+                        />
+                        <span className="text-gray-700 truncate max-w-[120px]">
+                          {channel.channel}
+                        </span>
+                      </div>
+                      <span className="font-semibold">{channel.conversions}</span>
                     </div>
-                    <span className="font-semibold">{channel.conversions}</span>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           </div>
@@ -996,12 +1172,19 @@ export default function WeeklyDashboard() {
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Pages</h3>
             <div className="space-y-3">
               {data.topPages.slice(0, 7).map((page, i) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                <div
+                  key={i}
+                  className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0"
+                >
                   <div className="flex-1 min-w-0 mr-3">
-                    <p className="text-sm font-medium text-gray-900 truncate">{page.title || page.path}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {page.title || page.path}
+                    </p>
                     <p className="text-xs text-gray-500 truncate">{page.path}</p>
                   </div>
-                  <span className="text-sm font-semibold text-gray-900">{page.pageviews.toLocaleString()}</span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {page.pageviews.toLocaleString()}
+                  </span>
                 </div>
               ))}
             </div>
@@ -1011,28 +1194,43 @@ export default function WeeklyDashboard() {
         {/* Summary Banner */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
           <h3 className="text-lg font-semibold mb-4">
-            Weekly Summary {isWoW ? "vs Previous Week" : "vs Last Year"}
+            Monthly Summary {isMoM ? "vs Previous Month" : "vs Last Year"}
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
             <div>
               <p className="text-blue-100 text-sm">Total Leads</p>
               <p className="text-3xl font-bold">{data.totals.conversions.toLocaleString()}</p>
-              <p className={`text-sm ${activeChanges.conversions >= 0 ? "text-green-300" : "text-red-300"}`}>
-                {activeChanges.conversions >= 0 ? "↑" : "↓"} {Math.abs(activeChanges.conversions).toFixed(1)}%
+              <p
+                className={`text-sm ${
+                  activeChanges.conversions >= 0 ? "text-green-300" : "text-red-300"
+                }`}
+              >
+                {activeChanges.conversions >= 0 ? "↑" : "↓"}{" "}
+                {Math.abs(activeChanges.conversions).toFixed(1)}%
               </p>
             </div>
             <div>
               <p className="text-blue-100 text-sm">Form Submissions</p>
               <p className="text-3xl font-bold">{data.totals.formSubmissions.toLocaleString()}</p>
-              <p className={`text-sm ${activeChanges.formSubmissions >= 0 ? "text-green-300" : "text-red-300"}`}>
-                {activeChanges.formSubmissions >= 0 ? "↑" : "↓"} {Math.abs(activeChanges.formSubmissions).toFixed(1)}%
+              <p
+                className={`text-sm ${
+                  activeChanges.formSubmissions >= 0 ? "text-green-300" : "text-red-300"
+                }`}
+              >
+                {activeChanges.formSubmissions >= 0 ? "↑" : "↓"}{" "}
+                {Math.abs(activeChanges.formSubmissions).toFixed(1)}%
               </p>
             </div>
             <div>
               <p className="text-blue-100 text-sm">Phone Calls</p>
               <p className="text-3xl font-bold">{data.totals.phoneCalls.toLocaleString()}</p>
-              <p className={`text-sm ${activeChanges.phoneCalls >= 0 ? "text-green-300" : "text-red-300"}`}>
-                {activeChanges.phoneCalls >= 0 ? "↑" : "↓"} {Math.abs(activeChanges.phoneCalls).toFixed(1)}%
+              <p
+                className={`text-sm ${
+                  activeChanges.phoneCalls >= 0 ? "text-green-300" : "text-red-300"
+                }`}
+              >
+                {activeChanges.phoneCalls >= 0 ? "↑" : "↓"}{" "}
+                {Math.abs(activeChanges.phoneCalls).toFixed(1)}%
               </p>
             </div>
             <div>
@@ -1042,19 +1240,27 @@ export default function WeeklyDashboard() {
             <div>
               <p className="text-blue-100 text-sm">Total Users</p>
               <p className="text-3xl font-bold">{data.totals.users.toLocaleString()}</p>
-              <p className={`text-sm ${activeChanges.users >= 0 ? "text-green-300" : "text-red-300"}`}>
-                {activeChanges.users >= 0 ? "↑" : "↓"} {Math.abs(activeChanges.users).toFixed(1)}%
+              <p
+                className={`text-sm ${
+                  activeChanges.users >= 0 ? "text-green-300" : "text-red-300"
+                }`}
+              >
+                {activeChanges.users >= 0 ? "↑" : "↓"}{" "}
+                {Math.abs(activeChanges.users).toFixed(1)}%
               </p>
             </div>
           </div>
         </div>
-        {/* Debug: Raw phone_call events by source (before redistribution) */}
+
+        {/* Debug: Raw phone_call events */}
         {data.rawPhoneCallsBySource && data.rawPhoneCallsBySource.length > 0 && (
           <section>
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white">
                 <h3 className="font-semibold text-lg">Debug: Raw phone_call Events by Source</h3>
-                <p className="text-amber-100 text-sm">Raw GA4 data before (not set) redistribution. Compare with GA4 Events &gt; phone_call report.</p>
+                <p className="text-amber-100 text-sm">
+                  Raw GA4 data before (not set) redistribution.
+                </p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -1062,21 +1268,32 @@ export default function WeeklyDashboard() {
                     <tr className="border-b border-gray-200 bg-gray-50">
                       <th className="text-left py-3 px-4 font-medium text-gray-500">Source</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-500">Medium</th>
-                      <th className="text-right py-3 px-4 font-medium text-gray-500">Phone Calls</th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-500">
+                        Phone Calls
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.rawPhoneCallsBySource.map((row, i) => (
-                      <tr key={i} className={`border-b border-gray-50 hover:bg-gray-50 ${row.source === '(not set)' ? 'bg-amber-50' : ''}`}>
+                      <tr
+                        key={i}
+                        className={`border-b border-gray-50 hover:bg-gray-50 ${
+                          row.source === "(not set)" ? "bg-amber-50" : ""
+                        }`}
+                      >
                         <td className="py-2 px-4 font-medium text-gray-900">{row.source}</td>
                         <td className="py-2 px-4 text-gray-500">{row.medium}</td>
-                        <td className="py-2 px-4 text-right font-semibold text-gray-900">{row.count}</td>
+                        <td className="py-2 px-4 text-right font-semibold text-gray-900">
+                          {row.count}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="bg-gray-100 font-semibold">
-                      <td className="py-3 px-4 text-gray-900" colSpan={2}>Total</td>
+                      <td className="py-3 px-4 text-gray-900" colSpan={2}>
+                        Total
+                      </td>
                       <td className="py-3 px-4 text-right text-gray-900">
                         {data.rawPhoneCallsBySource.reduce((sum, r) => sum + r.count, 0)}
                       </td>
@@ -1092,10 +1309,9 @@ export default function WeeklyDashboard() {
       <footer className="bg-white border-t border-gray-200 mt-8">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <p className="text-center text-gray-500 text-sm">
-            {isWoW
-              ? `Data compared with previous week (${formatFullDate(data.period.previousWeek.startDate)} - ${formatFullDate(data.period.previousWeek.endDate)})`
-              : `Data compared with same week last year (${formatFullDate(data.period.lastYear.startDate)} - ${formatFullDate(data.period.lastYear.endDate)})`
-            }
+            {isMoM
+              ? `Data compared with previous month (${formatFullDate(data.period.previousMonth.startDate)} – ${formatFullDate(data.period.previousMonth.endDate)})`
+              : `Data compared with same month last year (${formatFullDate(data.period.lastYear.startDate)} – ${formatFullDate(data.period.lastYear.endDate)})`}
           </p>
         </div>
       </footer>

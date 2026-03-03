@@ -153,12 +153,20 @@ export default function Dashboard() {
                 Google Analytics data with AI-powered insights
               </p>
             </div>
-            <Link
-              href="/weekly"
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Weekly Report
-            </Link>
+            <div className="flex gap-2">
+              <Link
+                href="/weekly"
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Weekly Report
+              </Link>
+              <Link
+                href="/monthly"
+                className="px-4 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              >
+                Monthly Report
+              </Link>
+            </div>
           </div>
         </div>
       </header>
